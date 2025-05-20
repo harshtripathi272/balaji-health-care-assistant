@@ -1,13 +1,30 @@
 import streamlit as st
+from Chatbot.chatbot import handle_user_input
+
+
 
 # Page selection
 page = st.sidebar.selectbox("Go to", ["Chatbot", "Inventory", "Orders", "Clients", "Suppliers"])
 
 if page == "Chatbot":
     st.title("AI Chat Assistant")
-    user_input = st.text_input("Ask something...")
+
+    
+    
+
+
+
+    user_query = st.text_input("Ask your assistant:")
+
+    
+
+
+
     if st.button("Send"):
-        st.write("🧠 Bot Reply: (Coming soon...)")
+        if user_query:
+            result = handle_user_input(user_query)
+            st.write("Response:")
+            st.write(result)
 
 elif page == "Inventory":
     st.title("Inventory Management")

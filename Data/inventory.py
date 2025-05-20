@@ -3,7 +3,8 @@ from firebase_config.config import db
 def get_inventory():
     inventory_ref = db.collection("inventory")
     docs = inventory_ref.stream()
-    return [doc.to_dict() for doc in docs]
+    return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+
 
 def add_inventory(inventory_data):
     db.collection("inventory").add(inventory_data)
