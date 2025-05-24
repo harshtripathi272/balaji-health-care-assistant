@@ -3,6 +3,8 @@ from google.cloud import firestore
 
 from google.cloud.firestore_v1 import ArrayRemove, ArrayUnion
 
+
+
 def add_order(order_data):
     """
     order_data = {
@@ -26,6 +28,7 @@ def add_order(order_data):
 
     # Add order to Firestore
     order_ref = db.collection("orders").add(order_doc)
+    order_id = order_ref[1].id  # order_ref is a tuple (write_result, reference)
 
     # Update inventory stock accordingly
     for item in items_list:
@@ -43,7 +46,9 @@ def add_order(order_data):
         # Update stock quantity in inventory
         db.collection("inventory_items").document(doc.id).update({"stock_quantity": new_stock})
 
-    print("Order added and inventory updated.")
+    print(f"Order added with ID: {order_id} and inventory updated.")
+    return order_id
+
 
 def get_order_by_id(order_id):
     """Fetch order by Firestore document ID."""
@@ -63,8 +68,8 @@ def get_orders_by_supplier(supplier_id):
 def get_orders_by_date_range(start_date, end_date):
     """Get orders placed between start_date and end_date."""
     docs = db.collection("orders")\
-        .where("order_date", ">=", start_date)\
-        .where("order_date", "<=", end_date)\
+        .where("date", ">=", start_date)\
+        .where("date", "<=", end_date)\
         .stream()
     return [doc.to_dict() for doc in docs]
 
