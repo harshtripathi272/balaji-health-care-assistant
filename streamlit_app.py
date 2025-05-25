@@ -1,23 +1,23 @@
 import streamlit as st
 from firebase_config.inventory import (
-    add_inventory_item, get_all_inventory_items
+    add_inventory_item, get_all_inventory_items, get_inventory_item_by_id, delete_inventory_item, get_items_by_category, get_items_expiring_soon
+    , get_low_stock_items, search_inventory_by_partial_name, update_inventory_item, update_stock_quantity
 )
 from firebase_config.orders import (
     add_order, get_all_orders
 )
 from firebase_config.clients import (
-    add_client, get_all_clients
+    add_client, get_all_clients, delete_client, get_client_by_id, get_client_by_name, get_client_order_history, get_client_payments, search_clients_by_partial_name, update_client, update_client_due
 )
-from firebase_config.suppliers import (
-    add_supplier, get_all_suppliers
-)
+
 from firebase_config.invoices import (
-    add_invoice, get_all_invoices
+    add_invoice, get_all_invoices, delete_invoice, get_invoice_by_id, get_invoice_by_number, update_invoice
 )
+from firebase_config.finance import add_expense, add_payment, add_supplier_payment, delete_expense, get_all_dues,get_expenses, get_payments, get_supplier_payments, get_total_expenses, get_total_payments, update_client_due, update_expense
 
 st.set_page_config(page_title="AI Business Assistant", layout="wide")
 
-tabs = st.tabs(["Inventory", "Orders", "Clients", "Suppliers", "Invoices"])
+tabs = st.tabs(["Inventory", "Orders", "Clients", "Suppliers", "Invoices", "Finanace"])
 
 # ---------------- Inventory ----------------
 with tabs[0]:
@@ -51,6 +51,7 @@ with tabs[0]:
     with st.form("Search by Name"):
         name = st.text_input("Enter full item name:")
         if st.form_submit_button("Search"):
+            from firebase_config.inventory import get_inventory_item_by_name
             results = get_inventory_item_by_name(name)
             if results:
                 for i in results:
@@ -63,6 +64,7 @@ with tabs[0]:
     with st.form("Search by Partial Name"):
         partial = st.text_input("Enter partial item name:")
         if st.form_submit_button("Search"):
+
             results = search_inventory_by_partial_name(partial)
             if results:
                 for i in results:
@@ -267,68 +269,359 @@ with tabs[1]:
 with tabs[2]:
     st.header("👥 Clients")
 
+    # --- Add Client Form ---
     with st.form("Add Client"):
         name = st.text_input("Client Name")
         email = st.text_input("Email")
         phone = st.text_input("Phone")
         submitted = st.form_submit_button("Add Client")
         if submitted:
-            add_client({
+            client_id = add_client({
                 "name": name,
                 "email": email,
-                "phone": phone
+                "phone": phone,
+                "total_due": 0.0
             })
-            st.success("Client added!")
+            st.success(f"Client added! ID: {client_id}")
 
-    st.subheader("All Clients")
+    # --- View All Clients ---
+    st.subheader("📋 All Clients")
     clients = get_all_clients()
     for client in clients:
         st.json(client)
 
+    client_names = [client["name"] for client in clients]
+    selected_name = st.selectbox("Select a client to view details", client_names)
+
+    selected_client = next((c for c in clients if c["name"] == selected_name), None)
+    if selected_client:
+        st.write("### Client Info")
+        st.json(selected_client)
+
+        # Show order history
+        st.write("### Order History")
+        order_history = get_client_order_history(selected_client["id"])
+        if order_history:
+            for order in order_history:
+                st.json(order)
+        else:
+            st.info("No orders found for this client.")
+
+    # --- Search Client by Exact Name ---
+    st.subheader("🔍 Search Client by Name")
+    with st.form("Search Client Name"):
+        search_name = st.text_input("Enter full client name")
+        if st.form_submit_button("Search"):
+            results = get_client_by_name(search_name)
+            for r in results:
+                st.json(r)
+
+    # --- Search Client by Partial Name ---
+    st.subheader("🔍 Search Client by Partial Name")
+    with st.form("Search Partial"):
+        partial_name = st.text_input("Enter partial name")
+        if st.form_submit_button("Search"):
+            results = search_clients_by_partial_name(partial_name)
+            for r in results:
+                st.json(r)
+
+    # --- View & Update a Specific Client by ID ---
+    st.subheader("✏️ Update Client Info")
+    with st.form("Update Client"):
+        client_id = st.text_input("Client ID to update")
+        new_name = st.text_input("New Name")
+        new_email = st.text_input("New Email")
+        new_phone = st.text_input("New Phone")
+        if st.form_submit_button("Update"):
+            update_client(client_id, {
+                "name": new_name,
+                "email": new_email,
+                "phone": new_phone
+            })
+            st.success("Client updated!")
+
+    # --- Delete Client ---
+    st.subheader("❌ Delete Client")
+    with st.form("Delete Client"):
+        delete_id = st.text_input("Client ID to delete")
+        if st.form_submit_button("Delete"):
+            delete_client(delete_id)
+            st.warning("Client deleted!")
+
+    # --- View Client Order History ---
+    st.subheader("📦 View Client Order History")
+    with st.form("Client Orders"):
+        order_client_id = st.text_input("Client ID for orders")
+        if st.form_submit_button("Show Orders"):
+            orders = get_client_order_history(order_client_id)
+            for o in orders:
+                st.json(o)
+
+    # --- View Client Payments ---
+    st.subheader("💵 View Client Payments")
+    with st.form("Client Payments"):
+        payment_client_id = st.text_input("Client ID for payments")
+        if st.form_submit_button("Show Payments"):
+            payments = get_client_payments(payment_client_id)
+            for p in payments:
+                st.json(p)
+
+    # --- Update Client Due ---
+    st.subheader("💰 Update Client Due")
+    with st.form("Update Due"):
+        due_client_id = st.text_input("Client ID to update due")
+        due_change = st.number_input("Change in due (positive or negative)", step=0.01)
+        if st.form_submit_button("Update Due"):
+            update_client_due(due_client_id, due_change)
+            st.success("Client due updated.")
+
+
 # ---------------- Suppliers ----------------
+from firebase_config.suppliers import (
+    add_supplier, get_all_suppliers, get_supplier_by_name,
+    search_suppliers_by_partial_name, get_supplier_order_history,
+    get_supplier_payments, update_supplier_due, update_supplier, delete_supplier
+)
+
 with tabs[3]:
     st.header("🏭 Suppliers")
 
+    # ---------- Add Supplier Form ----------
     with st.form("Add Supplier"):
+        st.subheader("➕ Add New Supplier")
         name = st.text_input("Supplier Name")
         contact_person = st.text_input("Contact Person")
         phone = st.text_input("Phone")
         items = st.text_area("Items Supplied (comma-separated)")
         submitted = st.form_submit_button("Add Supplier")
         if submitted:
-            add_supplier({
+            supplier_data = {
                 "name": name,
                 "contact_person": contact_person,
                 "phone": phone,
-                "items_supplied": [i.strip() for i in items.split(",")]
-            })
-            st.success("Supplier added!")
+                "items_supplied": [i.strip() for i in items.split(",")],
+                "total_due": 0.0
+            }
+            add_supplier(supplier_data)
+            st.success("✅ Supplier added successfully!")
 
-    st.subheader("All Suppliers")
+    # ---------- All Suppliers ----------
+    st.subheader("📋 All Suppliers")
     suppliers = get_all_suppliers()
     for supplier in suppliers:
-        st.json(supplier)
+        with st.expander(f"🔍 {supplier['name']}"):
+            st.write(supplier)
+
+            # Order History
+            st.markdown("**📦 Order History**")
+            history = get_supplier_order_history(supplier["id"])
+            for order in history:
+                st.json(order)
+
+            # Payment History
+            st.markdown("**💵 Payment History**")
+            payments = get_supplier_payments(supplier["id"])
+            for p in payments:
+                st.json(p)
+
+            # Update Due
+            st.markdown("**➕➖ Update Due Amount**")
+            due_change = st.number_input(f"Change due for {supplier['name']}", step=100.0, key=f"due_{supplier['id']}")
+            if st.button("Update Due", key=f"update_due_{supplier['id']}"):
+                update_supplier_due(supplier["id"], due_change)
+                st.success("✅ Due updated!")
+
+            # Update Supplier Details
+            st.markdown("**✏️ Update Supplier Info**")
+            new_phone = st.text_input("New Phone", value=supplier["phone"], key=f"phone_{supplier['id']}")
+            new_contact = st.text_input("New Contact Person", value=supplier["contact_person"], key=f"contact_{supplier['id']}")
+            if st.button("Update Supplier", key=f"edit_{supplier['id']}"):
+                update_supplier(supplier["id"], {
+                    "phone": new_phone,
+                    "contact_person": new_contact
+                })
+                st.success("✅ Supplier info updated!")
+
+            # Delete Supplier
+            if st.button("🗑️ Delete Supplier", key=f"delete_{supplier['id']}"):
+                delete_supplier(supplier["id"])
+                st.warning("⚠️ Supplier deleted. Refresh the page.")
+
+    # ---------- Search by Exact Name ----------
+    st.subheader("🔍 Search Supplier by Name")
+    with st.form("Search Supplier Exact"):
+        name_search = st.text_input("Enter exact name")
+        if st.form_submit_button("Search"):
+            results = get_supplier_by_name(name_search)
+            for r in results:
+                st.json(r)
+
+    # ---------- Search by Partial Name ----------
+    st.subheader("🔎 Search Supplier by Partial Name")
+    with st.form("Search Supplier Partial"):
+        partial_search = st.text_input("Enter partial name")
+        if st.form_submit_button("Search"):
+            results = search_suppliers_by_partial_name(partial_search)
+            for r in results:
+                st.json(r)
+
 
 # ---------------- Invoices ----------------
 with tabs[4]:
-    st.header("📑 Invoices")
-
+    # Add Invoice Form
     with st.form("Add Invoice"):
-        invoice_no = st.text_input("Invoice Number")
-        date = st.date_input("Date")
-        amount = st.number_input("Amount")
-        related_order = st.text_input("Related Order Info")
+        st.subheader("Add New Invoice")
+        invoice_number = st.text_input("Invoice Number")
+        client_id = st.text_input("Client ID")
+        client_name = st.text_input("Client Name")
+        date = st.date_input("Invoice Date", value=datetime.today())
+        items_raw = st.text_area("Items (JSON format)", help='Example: [{"item_name":"Bizaic","quantity":1,"unit_price":60000}]')
+        total_amount = st.number_input("Total Amount", min_value=0.0, format="%.2f")
+        status = st.selectbox("Status", ["paid", "pending", "overdue"])
+
         submitted = st.form_submit_button("Add Invoice")
         if submitted:
-            add_invoice({
-                "invoice_no": invoice_no,
-                "date": str(date),
-                "amount": amount,
-                "related_order": related_order
-            })
-            st.success("Invoice added!")
+            try:
+                import json
+                items = json.loads(items_raw)
+                invoice_data = {
+                    "invoice_number": invoice_number,
+                    "client_id": client_id,
+                    "client_name": client_name,
+                    "date": date.isoformat(),
+                    "items": items,
+                    "total_amount": total_amount,
+                    "status": status,
+                }
+                invoice_id = add_invoice(invoice_data)
+                st.success(f"Invoice added with ID: {invoice_id}")
+            except Exception as e:
+                st.error(f"Error adding invoice: {e}")
 
     st.subheader("All Invoices")
     invoices = get_all_invoices()
     for invoice in invoices:
         st.json(invoice)
+
+    st.subheader("Search Invoice by Number")
+    with st.form("Search Invoice"):
+        search_invoice_number = st.text_input("Enter Invoice Number")
+        search_submitted = st.form_submit_button("Search")
+        if search_submitted:
+            found_invoices = get_invoice_by_number(search_invoice_number)
+            if found_invoices:
+                for inv in found_invoices:
+                    st.json(inv)
+            else:
+                st.info("No invoices found with that number.")
+
+    st.subheader("Update Invoice")
+    with st.form("Update Invoice"):
+        update_id = st.text_input("Invoice Document ID")
+        update_field = st.text_input("Field to Update (e.g., status, total_amount)")
+        update_value = st.text_input("New Value")
+        update_submitted = st.form_submit_button("Update")
+        if update_submitted:
+            try:
+                # Convert update_value type if needed (simple heuristic)
+                if update_field in ["total_amount"]:
+                    update_value_casted = float(update_value)
+                else:
+                    update_value_casted = update_value
+                update_invoice(update_id, {update_field: update_value_casted})
+                st.success("Invoice updated successfully!")
+            except Exception as e:
+                st.error(f"Failed to update invoice: {e}")
+
+    st.subheader("Delete Invoice")
+    with st.form("Delete Invoice"):
+        delete_id = st.text_input("Invoice Document ID to Delete")
+        delete_submitted = st.form_submit_button("Delete")
+        if delete_submitted:
+            try:
+                delete_invoice(delete_id)
+                st.success("Invoice deleted successfully!")
+            except Exception as e:
+                st.error(f"Failed to delete invoice: {e}")
+
+with tabs[5]:
+    st.header("💰 Finance Overview")
+
+    # --- Add Payment ---
+    st.subheader("📥 Record Client Payment")
+    with st.form("Add Payment"):
+        client_id = st.text_input("Client ID")
+        amount = st.number_input("Amount", min_value=0.0)
+        invoice_id = st.text_input("Invoice ID (optional)")
+        payment_method = st.selectbox("Payment Method", ["cash", "bank transfer", "UPI", "other"])
+        notes = st.text_area("Notes", "")
+        submitted = st.form_submit_button("Record Payment")
+        if submitted:
+            from firebase_config.finance import add_payment, update_client_due
+            from google.cloud import firestore
+            add_payment({
+                "client_id": client_id,
+                "amount": amount,
+                "date": firestore.SERVER_TIMESTAMP,
+                "invoice_id": invoice_id,
+                "payment_method": payment_method,
+                "notes": notes
+            })
+            update_client_due(client_id, -amount)
+            st.success("Payment recorded and due updated!")
+
+    # --- Add Expense ---
+    st.subheader("📤 Record Expense")
+    with st.form("Add Expense"):
+        category = st.selectbox("Category", ["rent", "electricity", "salary", "supplies", "transport", "other"])
+        amount = st.number_input("Expense Amount", min_value=0.0, key="expense_amount")
+        paid_to = st.text_input("Paid To")
+        description = st.text_area("Description")
+        submit_expense = st.form_submit_button("Record Expense")
+        if submit_expense:
+            from firebase_config.finance import add_expense
+            from google.cloud import firestore
+            add_expense({
+                "category": category,
+                "amount": amount,
+                "date": firestore.SERVER_TIMESTAMP,
+                "paid_to": paid_to,
+                "description": description
+            })
+            st.success("Expense recorded!")
+
+    # --- View Dues ---
+    st.subheader("📋 Clients with Dues")
+    from firebase_config.finance import get_all_dues
+    dues = get_all_dues()
+    if dues:
+        for d in dues:
+            st.markdown(f"**{d['name']}** (Due: ₹{d['total_due']})")
+    else:
+        st.info("No dues found.")
+
+    # --- View Payments ---
+    st.subheader("🧾 All Client Payments")
+    from firebase_config.finance import get_payments
+    payments = get_payments()
+    for p in payments:
+        st.json(p)
+
+    # --- View Expenses ---
+    st.subheader("📉 All Expenses")
+    from firebase_config.finance import get_expenses
+    expenses = get_expenses()
+    for e in expenses:
+        st.json(e)
+
+    # --- Finance Summary ---
+    st.subheader("📊 Financial Summary")
+    from firebase_config.finance import get_total_payments, get_total_expenses
+    total_in = get_total_payments()
+    total_out = get_total_expenses()
+    net = total_in - total_out
+    st.markdown(f"""
+        - 💸 **Total Payments Received:** ₹{total_in}
+        - 📤 **Total Expenses:** ₹{total_out}
+        - 💼 **Net Balance:** ₹{net}
+    """)
