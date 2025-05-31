@@ -1,111 +1,105 @@
 from firebase_config.config import db
 from google.cloud import firestore
+from datetime import datetime
 
-# Add a payment received from a client
+# ------------------------ Payments ------------------------
+
 def add_payment(payment_data: dict) -> str:
-    """
-    payment_data example:
-    {
-        "client_id": "abc123",
-        "amount": 5000.0,
-        "date": firestore.SERVER_TIMESTAMP,  # or a datetime object
-        "invoice_id": "inv123",  # optional
-        "payment_method": "cash",  # optional
-        "notes": "Partial payment"
-    }
-    """
-    doc_ref = db.collection("payments").add(payment_data)
+    payment_data["date"] = payment_data.get("date", firestore.SERVER_TIMESTAMP)
+    doc_ref = db.collection("Payments").add(payment_data)
     return doc_ref[1].id
 
-# Get all payments, optionally filter by client_id or date range
 def get_payments(client_id=None, start_date=None, end_date=None) -> list:
-    payments_ref = db.collection("payments")
-    query = payments_ref
-
+    query = db.collection("Payments")
     if client_id:
         query = query.where("client_id", "==", client_id)
     if start_date:
         query = query.where("date", ">=", start_date)
     if end_date:
         query = query.where("date", "<=", end_date)
-
     docs = query.stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
-# Add an expense record
+def get_total_payments(client_id=None, start_date=None, end_date=None) -> float:
+    payments = get_payments(client_id, start_date, end_date)
+    return sum(p.get("amount", 0) for p in payments)
+
+def get_all_dues() -> list:
+    docs = db.collection("clients").where("total_due", ">", 0).stream()
+    return [doc.to_dict() | {"id": doc.id} for doc in docs]
+
+# ------------------------ Expenses ------------------------
+
 def add_expense(expense_data: dict) -> str:
-    """
-    expense_data example:
-    {
-        "category": "rent",
-        "amount": 15000.0,
-        "date": firestore.SERVER_TIMESTAMP,  # or datetime
-        "description": "Office rent for May",
-        "paid_to": "Landlord"
-    }
-    """
-    doc_ref = db.collection("expenses").add(expense_data)
+    expense_data["date"] = expense_data.get("date", firestore.SERVER_TIMESTAMP)
+    doc_ref = db.collection("Expenses").add(expense_data)
     return doc_ref[1].id
 
-# Get all expenses, optionally filtered by category or date range
 def get_expenses(category=None, start_date=None, end_date=None) -> list:
-    expenses_ref = db.collection("expenses")
-    query = expenses_ref
-
+    query = db.collection("Expenses")
     if category:
         query = query.where("category", "==", category)
     if start_date:
         query = query.where("date", ">=", start_date)
     if end_date:
         query = query.where("date", "<=", end_date)
-
     docs = query.stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
-# Update an expense by ID
 def update_expense(expense_id: str, updated_data: dict):
-    db.collection("expenses").document(expense_id).update(updated_data)
+    updated_data["updated_at"] = firestore.SERVER_TIMESTAMP
+    db.collection("Expenses").document(expense_id).update(updated_data)
 
-# Delete an expense by ID
 def delete_expense(expense_id: str):
-    db.collection("expenses").document(expense_id).delete()
+    db.collection("Expenses").document(expense_id).delete()
 
-# Calculate total payments received (optionally for a client and/or date range)
-def get_total_payments(client_id=None, start_date=None, end_date=None) -> float:
-    payments = get_payments(client_id, start_date, end_date)
-    return sum(p.get("amount", 0) for p in payments)
-
-# Calculate total expenses (optionally by category and/or date range)
 def get_total_expenses(category=None, start_date=None, end_date=None) -> float:
     expenses = get_expenses(category, start_date, end_date)
     return sum(e.get("amount", 0) for e in expenses)
 
-# Fetch all dues (clients who owe money)
-def get_all_dues():
-    clients_ref = db.collection("clients")
-    docs = clients_ref.where("total_due", ">", 0).stream()
-    return [doc.to_dict() | {"id": doc.id} for doc in docs]
-
-# Update client's total due amount (increment or decrement)
-def update_client_due(client_id: str, change_amount: float):
-    doc_ref = db.collection("clients").document(client_id)
-    doc_ref.update({"total_due": firestore.Increment(change_amount)})
-
-# Fetch payments made to suppliers (if you track these)
-def get_supplier_payments(supplier_id=None, start_date=None, end_date=None):
-    payments_ref = db.collection("supplier_payments")
-    query = payments_ref
+# ------------------------ Supplier Payments ------------------------
+from typing import List
+def get_supplier_payments(supplier_id=None, start_date=None, end_date=None) -> List[dict]:
+    query = db.collection("supplier_payments")
+    
     if supplier_id:
         query = query.where("supplier_id", "==", supplier_id)
     if start_date:
         query = query.where("date", ">=", start_date)
     if end_date:
         query = query.where("date", "<=", end_date)
+    
     docs = query.stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
-# Add supplier payment
+
+
+
 def add_supplier_payment(payment_data: dict) -> str:
-    doc_ref = db.collection("supplier_payments").add(payment_data)
-    return doc_ref[1].id
+    supplier_id = payment_data.get("supplier_id")
+    amount = payment_data.get("amount", 0)
+    if not supplier_id or amount <= 0:
+        raise ValueError("supplier_id and positive amount are required")
+    
+    payment_data["date"] = payment_data.get("date", firestore.SERVER_TIMESTAMP)
+    
+    # Add to `supplier_payments` collection
+    payment_ref = db.collection("supplier_payments").add(payment_data)
+    
+    # Update supplier's due_amount
+    supplier_ref = db.collection("suppliers").document(supplier_id)
+    
+    def update_due(transaction):
+        snapshot = transaction.get(supplier_ref)
+        current_due = snapshot.get("due_amount") or 0
+        new_due = max(0, current_due - amount)
+        transaction.update(supplier_ref, {
+            "due_amount": new_due,
+            "updated_at": firestore.SERVER_TIMESTAMP,
+            "updated_by": payment_data.get("added_by")
+        })
+    
+    db.run_transaction(update_due)
+    
+    return payment_ref[1].id
 

@@ -1,23 +1,15 @@
 import streamlit as st
-from firebase_config.inventory import (
-    add_inventory_item, get_all_inventory_items, get_inventory_item_by_id, delete_inventory_item, get_items_by_category, get_items_expiring_soon
-    , get_low_stock_items, search_inventory_by_partial_name, update_inventory_item, update_stock_quantity
-)
-from firebase_config.orders import (
-    add_order, get_all_orders
-)
-from firebase_config.clients import (
-    add_client, get_all_clients, delete_client, get_client_by_id, get_client_by_name, get_client_order_history, get_client_payments, search_clients_by_partial_name, update_client, update_client_due
-)
+from firebase_config.agent import run_agent
+from firebase_config.inventory import *
+from firebase_config.orders import *
+from firebase_config.clients import *
 
-from firebase_config.invoices import (
-    add_invoice, get_all_invoices, delete_invoice, get_invoice_by_id, get_invoice_by_number, update_invoice
-)
-from firebase_config.finance import add_expense, add_payment, add_supplier_payment, delete_expense, get_all_dues,get_expenses, get_payments, get_supplier_payments, get_total_expenses, get_total_payments, update_client_due, update_expense
+from firebase_config.invoices import *
+from firebase_config.finance import *
 
 st.set_page_config(page_title="AI Business Assistant", layout="wide")
 
-tabs = st.tabs(["Inventory", "Orders", "Clients", "Suppliers", "Invoices", "Finanace"])
+tabs = st.tabs(["Inventory", "Orders", "Clients", "Suppliers", "Invoices", "Finanace", "ChatBot"])
 
 # ---------------- Inventory ----------------
 with tabs[0]:
@@ -433,12 +425,13 @@ with tabs[3]:
 
             # Update Supplier Details
             st.markdown("**✏️ Update Supplier Info**")
-            new_phone = st.text_input("New Phone", value=supplier["phone"], key=f"phone_{supplier['id']}")
-            new_contact = st.text_input("New Contact Person", value=supplier["contact_person"], key=f"contact_{supplier['id']}")
+
+# Removed new_phone and new_contact inputs and update fields
+
             if st.button("Update Supplier", key=f"edit_{supplier['id']}"):
+                # Update without phone and contact_person
                 update_supplier(supplier["id"], {
-                    "phone": new_phone,
-                    "contact_person": new_contact
+                    # Add any other fields you want to update here
                 })
                 st.success("✅ Supplier info updated!")
 
@@ -446,6 +439,7 @@ with tabs[3]:
             if st.button("🗑️ Delete Supplier", key=f"delete_{supplier['id']}"):
                 delete_supplier(supplier["id"])
                 st.warning("⚠️ Supplier deleted. Refresh the page.")
+
 
     # ---------- Search by Exact Name ----------
     st.subheader("🔍 Search Supplier by Name")
@@ -625,3 +619,39 @@ with tabs[5]:
         - 📤 **Total Expenses:** ₹{total_out}
         - 💼 **Net Balance:** ₹{net}
     """)
+    with tabs[6]:
+        st.title("🤖 Chat with Your AI Business Assistant")
+
+    # Initialize chat history in session state
+        if "chat_history" not in st.session_state:
+            st.session_state.chat_history = []
+
+    # Clear button
+        if st.button("🧹 Clear Chat"):
+            st.session_state.chat_history = []
+
+    # Display previous messages
+        for i, chat in enumerate(st.session_state.chat_history):
+            with st.chat_message("user"):
+                st.markdown(chat["user"])
+            with st.chat_message("assistant"):
+                st.markdown(chat["bot"])
+
+    # Chat input
+        user_input = st.chat_input("Ask anything about inventory, orders, finance...")
+
+        if user_input:
+            with st.chat_message("user"):
+                st.markdown(user_input)
+
+            with st.spinner("Thinking..."):
+                try:
+                    bot_response = run_agent(user_input)
+                except Exception as e:
+                    bot_response = f"❌ Error: {e}"
+
+            with st.chat_message("assistant"):
+                st.markdown(bot_response)
+
+        # Save to history
+            st.session_state.chat_history.append({"user": user_input, "bot": bot_response})
