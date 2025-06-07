@@ -1,13 +1,22 @@
-
-from langchain_core.tools import Tool
-from typing import List, Dict
-# Import all your Firebase functions
+from langchain.tools import Tool
 from firebase_config.inventory import *
 from firebase_config.clients import *
 from firebase_config.finance import *
 from firebase_config.invoices import *
 from firebase_config.orders import *
 from firebase_config.suppliers import *
+from firebase_config.llama_index_configs.order_index import load_orders_index
+
+# Lazy load orders index to avoid crash if index not built yet
+def query_orders_semantic(query: str) -> str:
+    try:
+        index = load_orders_index()
+        response = index.as_query_engine().query(query)
+        return str(response)
+    except FileNotFoundError:
+        return "Orders index not found. Please build it first."
+    except Exception as e:
+        return f"Error querying orders index: {e}"
 
 # Inventory tools
 inventory_tools = [
@@ -59,9 +68,18 @@ order_tools = [
     Tool("GetOrdersByStatus", get_orders_by_status, "Get orders by status."),
     Tool("GetOrdersBySupplier", get_orders_by_supplier, "Get orders made from a supplier."),
     Tool("GetTotalSalesInPeriod", lambda data: get_total_sales_in_period(data['start_date'], data['end_date']), "Get total sales in a given period."),
-    Tool(name="GetAllOrders",func=lambda _: get_all_orders(),description="Get all orders.",return_direct=True),
+    Tool(name="GetAllOrders", func=lambda _: get_all_orders(), description="Get all orders.", return_direct=True),
     Tool("SearchOrdersByInvoiceNumber", search_orders_by_invoice_number, "Search orders by invoice number."),
 ]
+
+# Append semantic search tool for orders
+order_tools.append(
+    Tool(
+        name="SemanticSearchOrders",
+        func=query_orders_semantic,
+        description="Semantic search over orders when exact tool is not found."
+    )
+)
 
 # Invoices tools
 invoice_tools = [

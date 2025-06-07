@@ -2,6 +2,7 @@ from firebase_config.config import db
 from google.cloud import firestore
 from datetime import datetime
 from typing import List, Dict
+from google.cloud.firestore_v1 import FieldFilter
 # ------------------------ Clients ------------------------
 
 def add_client(client_data: dict) -> str:
@@ -11,7 +12,7 @@ def add_client(client_data: dict) -> str:
     return doc_ref[1].id
 
 def get_client_by_name(name: str) -> list:
-    docs = db.collection("Clients").where("name", "==", name).stream()
+    docs = db.collection("Clients").where(filter=FieldFilter("name", "==", name)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 def get_client_by_id(client_id: str):
@@ -40,8 +41,8 @@ def search_clients_by_partial_name(partial_name: str) -> list:
 def get_client_order_history(client_id: str) -> list:
     orders = (
         db.collection("Orders")
-        .where("client_id", "==", client_id)
-        .where("type", "==", "sell")
+        .where(filter=FieldFilter("client_id", "==", client_id))
+        .where(filter=FieldFilter("type", "==", "sell"))
         .stream()
     )
     return [doc.to_dict() | {"id": doc.id} for doc in orders]
@@ -55,13 +56,13 @@ def update_client_due(client_id: str, change_amount: float):
     })
 
 def get_client_payments(client_id: str) -> list:
-    docs = db.collection("Payments").where("client_id", "==", client_id).stream()
+    docs = db.collection("Payments").where(filter=FieldFilter("client_id", "==", client_id)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 # ------------------------ Utilities ------------------------
 
 def resolve_client_id_by_name(name: str) :
-    docs = db.collection("Clients").where("name", "==", name).limit(1).stream()
+    docs = db.collection("Clients").where(filter=FieldFilter("name", "==", name)).limit(1).stream()
     for doc in docs:
         return doc.id
     return None

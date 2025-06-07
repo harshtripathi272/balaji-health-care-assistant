@@ -1,7 +1,7 @@
 from firebase_config.config import db
 from google.cloud import firestore
 from typing import List, Dict
-
+from google.cloud.firestore_v1 import FieldFilter
 
 # Add a new supplier
 from google.cloud import firestore
@@ -16,7 +16,7 @@ def add_supplier(supplier_data):
 
 # Get supplier by exact name
 def get_supplier_by_name(name: str) -> List[Dict]:
-    docs = db.collection("Suppliers").where("name", "==", name).stream()
+    docs = db.collection("Suppliers").where(filter=FieldFilter("name", "==", name)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 
@@ -63,7 +63,7 @@ def update_supplier_due(supplier_id: str, change_amount: float):
 
 # Get payment records made to a supplier
 def get_supplier_payments(supplier_id: str) -> List[Dict]:
-    docs = db.collection("P ayments").where("supplier_id", "==", supplier_id).stream()
+    docs = db.collection("P ayments").where(filter=FieldFilter("supplier_id", "==", supplier_id)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 
@@ -71,8 +71,8 @@ def get_supplier_payments(supplier_id: str) -> List[Dict]:
 def get_supplier_order_history(supplier_id: str) -> list:
     orders = (
         db.collection("Orders")
-        .where("supplier_id", "==", supplier_id)
-        .where("type", "==", "purchase")
+        .where(filter=FieldFilter("supplier_id", "==", supplier_id))
+        .where(filter=FieldFilter("type", "==", "purchase"))
         .stream()
     )
     return [doc.to_dict() | {"id": doc.id} for doc in orders]

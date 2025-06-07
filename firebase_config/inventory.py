@@ -3,7 +3,7 @@ from google.cloud import firestore
 from google.cloud.firestore import DocumentSnapshot
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
-
+from google.cloud.firestore_v1 import FieldFilter
 # ---------------- Inventory CRUD ----------------
 
 def add_inventory_item(item_data: Dict) -> str:
@@ -13,7 +13,7 @@ def add_inventory_item(item_data: Dict) -> str:
     return doc_ref[1].id
 
 def get_inventory_item_by_name(name: str) -> List[Dict]:
-    docs = db.collection("Inventory Items").where("name", "==", name).stream()
+    docs = db.collection("Inventory Items").where(filter=FieldFilter("name", "==", name)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 def get_inventory_item_by_id(doc_id: str) -> Optional[Dict]:
@@ -34,11 +34,11 @@ def get_all_inventory_items() -> List[Dict]:
 # ---------------- Filtering & Helpers ----------------
 
 def get_items_by_category(category: str) -> List[Dict]:
-    docs = db.collection("Inventory Items").where("category", "==", category).stream()
+    docs = db.collection("Inventory Items").where(filter=FieldFilter("category", "==", category)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 def get_low_stock_items(threshold: int = 10) -> List[Dict]:
-    docs = db.collection("Inventory Items").where("stock_quantity", "<=", threshold).stream()
+    docs = db.collection("Inventory Items").where(filter=FieldFilter("stock_quantity", "<=", threshold)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 def update_stock_quantity(doc_id: str, change: int):
@@ -59,12 +59,12 @@ def get_items_expiring_soon(days: int = 30) -> List[Dict]:
     now = datetime.utcnow()
     future = now + timedelta(days=days)
     docs = db.collection("Inventory Items")\
-             .where("expiry_date", "<=", future)\
+             .where(filter=FieldFilter("expiry_date", "<=", future))\
              .stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 def resolve_inventory_item_id_by_name(name: str) -> Optional[str]:
-    docs = db.collection("Inventory Items").where("name", "==", name).limit(1).stream()
+    docs = db.collection("Inventory Items").where(filter=FieldFilter("name", "==", name)).limit(1).stream()
     for doc in docs:
         return doc.id
     return None

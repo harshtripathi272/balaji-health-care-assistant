@@ -1,4 +1,10 @@
 import streamlit as st
+import sys
+import os
+
+# Add the root of your project to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import logging
 from datetime import datetime
 from firebase_config.agent import run_agent

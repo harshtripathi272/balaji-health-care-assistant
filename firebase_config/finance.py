@@ -2,6 +2,7 @@ from firebase_config.config import db
 from google.cloud import firestore
 from datetime import datetime
 from typing import List, Dict
+from google.cloud.firestore_v1 import FieldFilter
 # ------------------------ Payments ------------------------
 
 def add_payment(payment_data: dict) -> str:
@@ -12,11 +13,11 @@ def add_payment(payment_data: dict) -> str:
 def get_payments(client_id=None, start_date=None, end_date=None) -> list:
     query = db.collection("Payments")
     if client_id:
-        query = query.where("client_id", "==", client_id)
+        query = query.where(filter=FieldFilter("client_id", "==", client_id))
     if start_date:
-        query = query.where("date", ">=", start_date)
+        query = query.where(filter=FieldFilter("date", ">=", start_date))
     if end_date:
-        query = query.where("date", "<=", end_date)
+        query = query.where(filter=FieldFilter("date", "<=", end_date))
     docs = query.stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
@@ -25,7 +26,7 @@ def get_total_payments(client_id=None, start_date=None, end_date=None) -> float:
     return sum(p.get("amount", 0) for p in payments)
 
 def get_all_dues() -> list:
-    docs = db.collection("clients").where("total_due", ">", 0).stream()
+    docs = db.collection("clients").where(filter=FieldFilter("total_due", ">", 0)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 # ------------------------ Expenses ------------------------
@@ -38,11 +39,11 @@ def add_expense(expense_data: dict) -> str:
 def get_expenses(category=None, start_date=None, end_date=None) -> list:
     query = db.collection("Expenses")
     if category:
-        query = query.where("category", "==", category)
+        query = query.where(filter=FieldFilter("category", "==", category))
     if start_date:
-        query = query.where("date", ">=", start_date)
+        query = query.where(filter=FieldFilter("date", ">=", start_date))
     if end_date:
-        query = query.where("date", "<=", end_date)
+        query = query.where(filter=FieldFilter("date", "<=", end_date))
     docs = query.stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
@@ -63,11 +64,11 @@ def get_supplier_payments(supplier_id=None, start_date=None, end_date=None) -> L
     query = db.collection("supplier_payments")
     
     if supplier_id:
-        query = query.where("supplier_id", "==", supplier_id)
+        query = query.where(filter=FieldFilter("supplier_id", "==", supplier_id))
     if start_date:
-        query = query.where("date", ">=", start_date)
+        query = query.where(filter=FieldFilter("date", ">=", start_date))
     if end_date:
-        query = query.where("date", "<=", end_date)
+        query = query.where(filter=FieldFilter("date", "<=", end_date))
     
     docs = query.stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]

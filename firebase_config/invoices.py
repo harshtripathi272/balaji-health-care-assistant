@@ -3,7 +3,7 @@ from firebase_config.config import db
 from google.cloud import firestore
 from typing import Dict, List
 from datetime import datetime
-
+from google.cloud.firestore_v1 import FieldFilter
 
 def add_invoice(invoice_data: Dict) -> str:
     """
@@ -44,7 +44,7 @@ def add_invoice(invoice_data: Dict) -> str:
 
 # Get invoice(s) by exact invoice number
 def get_invoice_by_number(invoice_number):
-    docs = db.collection("Invoices").where("invoice_number", "==", invoice_number).stream()
+    docs = db.collection("Invoices").where(filter=FieldFilter("invoice_number", "==", invoice_number)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 # Get invoice by document ID

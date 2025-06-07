@@ -8,7 +8,7 @@ from firebase_config.config import db
 from google.cloud import firestore
 from typing import Dict, List, Optional
 from datetime import datetime
-
+from google.cloud.firestore_v1 import FieldFilter
 
 def add_order(order_data: Dict) -> str:
     """
@@ -133,55 +133,40 @@ def GetAllOrders():
 
 
 
+import firebase_admin
+from firebase_admin import firestore
+
+db = firestore.client()
+
 def get_all_orders():
-    """Fetch all orders and format them nicely for display."""
-    orders_ref = db.collection("Orders").stream()
-    output = []
-    for doc in orders_ref:
+    orders_ref = db.collection('orders')
+    docs = orders_ref.stream()
+
+    orders = []
+    for doc in docs:
         data = doc.to_dict()
-        data["id"] = doc.id
+        data['order_id'] = doc.id  # Optional: include Firestore doc ID
+        orders.append(data)
+    return orders
 
-        # Handle datetime formatting
-        order_date = data.get("order_date")
-        if hasattr(order_date, "strftime"):
-            order_date = order_date.astimezone(timezone.utc).strftime("%d-%b-%Y")
-        else:
-            order_date = "N/A"
-
-        items_str = ""
-        for item in data.get("items", []):
-            items_str += f'{item["quantity"]} x {item["item_name"].strip()} @ ₹{item["price"]}, '
-
-        summary = (
-            f"🔹 **Order ID:** {data['id']}\n"
-            f"📅 **Date:** {order_date}\n"
-            f"👤 **Client ID:** {data.get('client_id', 'N/A')}\n"
-            f"📦 **Items:** {items_str.strip(', ')}\n"
-            f"💰 **Total:** ₹{data.get('total_amount', 0)}\n"
-            f"📌 **Status:** {data.get('status', 'N/A').capitalize()}\n"
-            f"📝 **Remarks:** {data.get('remarks', '-')}\n"
-        )
-        output.append(summary)
-
-    return "\n\n".join(output) if output else "No orders found."
 # ---------------- Filtering ----------------
 
 def get_orders_by_client(client_id: str) -> List[Dict]:
-    docs = db.collection("Orders").where("client_id", "==", client_id).stream()
+    docs = db.collection("Orders").where(filter=FieldFilter("client_id", "==", client_id)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 def get_orders_by_supplier(supplier_id: str) -> List[Dict]:
-    docs = db.collection("Orders").where("supplier_id", "==", supplier_id).stream()
+    docs = db.collection("Orders").where(filter=FieldFilter("supplier_id", "==", supplier_id)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 def get_orders_by_status(status: str) -> List[Dict]:
-    docs = db.collection("Orders").where("status", "==", status).stream()
+    docs = db.collection("Orders").where(filter=FieldFilter("status", "==", status)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 def get_orders_by_date_range(start_date: datetime, end_date: datetime) -> List[Dict]:
     docs = db.collection("Orders")\
-        .where("date", ">=", start_date)\
-        .where("date", "<=", end_date)\
+        .where(filter=FieldFilter("date", ">=", start_date))\
+        .where(filter=FieldFilter("date", "<=", end_date))\
         .stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
@@ -201,5 +186,5 @@ def delete_order(order_id: str):
 # ---------------- Invoice Support ----------------
 
 def search_orders_by_invoice_number(invoice_number: str) -> List[Dict]:
-    docs = db.collection("Orders").where("invoice_number", "==", invoice_number).stream()
+    docs = db.collection("Orders").where(filter=FieldFilter("invoice_number", "==", invoice_number)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
