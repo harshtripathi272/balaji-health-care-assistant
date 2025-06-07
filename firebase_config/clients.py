@@ -1,7 +1,7 @@
 from firebase_config.config import db
 from google.cloud import firestore
 from datetime import datetime
-
+from typing import List, Dict
 # ------------------------ Clients ------------------------
 
 def add_client(client_data: dict) -> str:

@@ -1,7 +1,7 @@
 from firebase_config.config import db
 from google.cloud import firestore
 from datetime import datetime
-
+from typing import List, Dict
 # ------------------------ Payments ------------------------
 
 def add_payment(payment_data: dict) -> str:

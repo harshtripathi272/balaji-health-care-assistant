@@ -1,7 +1,7 @@
 # Add a new invoice and return its document ID
 from firebase_config.config import db
 from google.cloud import firestore
-from typing import Dict
+from typing import Dict, List
 from datetime import datetime
 
 

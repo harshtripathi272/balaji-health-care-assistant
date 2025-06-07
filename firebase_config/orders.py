@@ -1,7 +1,7 @@
 from firebase_config.config import db
 from google.cloud import firestore
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 # ---------------- Order Handling ----------------
 from firebase_config.config import db
@@ -121,10 +121,49 @@ def get_order_by_id(order_id: str) -> Optional[Dict]:
     doc = db.collection("Orders").document(order_id).get()
     return doc.to_dict() | {"id": doc.id} if doc.exists else None
 
-def get_all_orders() -> List[Dict]:
-    docs = db.collection("Orders").stream()
-    return [doc.to_dict() | {"id": doc.id} for doc in docs]
+def GetAllOrders():
+    """Fetch all orders from Firestore."""
+    orders_ref = db.collection("Orders").stream()
+    orders = []
+    for doc in orders_ref:
+        data = doc.to_dict()
+        data["id"] = doc.id
+        orders.append(data)
+    return orders
 
+
+
+def get_all_orders():
+    """Fetch all orders and format them nicely for display."""
+    orders_ref = db.collection("Orders").stream()
+    output = []
+    for doc in orders_ref:
+        data = doc.to_dict()
+        data["id"] = doc.id
+
+        # Handle datetime formatting
+        order_date = data.get("order_date")
+        if hasattr(order_date, "strftime"):
+            order_date = order_date.astimezone(timezone.utc).strftime("%d-%b-%Y")
+        else:
+            order_date = "N/A"
+
+        items_str = ""
+        for item in data.get("items", []):
+            items_str += f'{item["quantity"]} x {item["item_name"].strip()} @ ₹{item["price"]}, '
+
+        summary = (
+            f"🔹 **Order ID:** {data['id']}\n"
+            f"📅 **Date:** {order_date}\n"
+            f"👤 **Client ID:** {data.get('client_id', 'N/A')}\n"
+            f"📦 **Items:** {items_str.strip(', ')}\n"
+            f"💰 **Total:** ₹{data.get('total_amount', 0)}\n"
+            f"📌 **Status:** {data.get('status', 'N/A').capitalize()}\n"
+            f"📝 **Remarks:** {data.get('remarks', '-')}\n"
+        )
+        output.append(summary)
+
+    return "\n\n".join(output) if output else "No orders found."
 # ---------------- Filtering ----------------
 
 def get_orders_by_client(client_id: str) -> List[Dict]:

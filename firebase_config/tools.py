@@ -1,6 +1,6 @@
 
 from langchain_core.tools import Tool
-
+from typing import List, Dict
 # Import all your Firebase functions
 from firebase_config.inventory import *
 from firebase_config.clients import *
@@ -59,7 +59,7 @@ order_tools = [
     Tool("GetOrdersByStatus", get_orders_by_status, "Get orders by status."),
     Tool("GetOrdersBySupplier", get_orders_by_supplier, "Get orders made from a supplier."),
     Tool("GetTotalSalesInPeriod", lambda data: get_total_sales_in_period(data['start_date'], data['end_date']), "Get total sales in a given period."),
-    Tool("GetAllOrders", lambda _: get_all_orders(), "Get all orders."),
+    Tool(name="GetAllOrders",func=lambda _: get_all_orders(),description="Get all orders.",return_direct=True),
     Tool("SearchOrdersByInvoiceNumber", search_orders_by_invoice_number, "Search orders by invoice number."),
 ]
 
