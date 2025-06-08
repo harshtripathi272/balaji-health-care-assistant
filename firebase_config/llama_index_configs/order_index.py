@@ -1,17 +1,15 @@
-# vector_indexes/orders_index.py
-
-from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, StorageContext, load_index_from_storage
 import os
-
-# Ensure data is saved persistently
+from llama_index.core import VectorStoreIndex, StorageContext, load_index_from_storage
+from firebase_config.llama_index_configs import global_settings 
 index_path = "indexes/orders"
 
 def build_orders_index(documents):
-    index = VectorStoreIndex.from_documents(documents)
+    os.makedirs(index_path, exist_ok=True)
+    index = VectorStoreIndex.from_documents(documents)  # no service_context
     index.storage_context.persist(persist_dir=index_path)
 
 def load_orders_index():
-    if not os.path.exists(index_path):
-        raise FileNotFoundError("Orders index not found. Please build it first.")
+    if not os.path.exists(index_path) or not os.listdir(index_path):
+        raise FileNotFoundError("❌ Orders index not found or empty. Please build it first.")
     storage_context = StorageContext.from_defaults(persist_dir=index_path)
-    return load_index_from_storage(storage_context)
+    return load_index_from_storage(storage_context)  # no service_context

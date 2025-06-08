@@ -2,8 +2,11 @@ import streamlit as st
 import sys
 import os
 
+os.environ["STREAMLIT_WATCHFILE"] = "false"
+
 # Add the root of your project to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from firebase_config.llama_index_configs import global_settings  # triggers embedding config
 
 import logging
 from datetime import datetime

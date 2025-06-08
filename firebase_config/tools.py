@@ -6,8 +6,16 @@ from firebase_config.invoices import *
 from firebase_config.orders import *
 from firebase_config.suppliers import *
 from firebase_config.llama_index_configs.order_index import load_orders_index
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+# from llama_index import ServiceContext
+# from llama_index_configs.order_index import load_orders_index
+from firebase_config.llama_index_configs import global_settings  # triggers embedding config
 
-# Lazy load orders index to avoid crash if index not built yet
+# Create service_context once, or pass it as a parameter
+# firebase_config/tools.py or wherever your tools are defined
+
+from firebase_config.llama_index_configs.order_index import load_orders_index
+
 def query_orders_semantic(query: str) -> str:
     try:
         index = load_orders_index()
@@ -17,6 +25,7 @@ def query_orders_semantic(query: str) -> str:
         return "Orders index not found. Please build it first."
     except Exception as e:
         return f"Error querying orders index: {e}"
+
 
 # Inventory tools
 inventory_tools = [

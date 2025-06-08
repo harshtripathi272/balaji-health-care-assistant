@@ -4,6 +4,7 @@ from langchain.agents.agent_types import AgentType
 from langchain.memory import ConversationBufferMemory
 from firebase_config.tools import all_tools
 import os
+from firebase_config.llama_index_configs import global_settings  # triggers embedding config
 
 # Load Gemini API key
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")

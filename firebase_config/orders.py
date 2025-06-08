@@ -145,9 +145,13 @@ def get_all_orders():
     orders = []
     for doc in docs:
         data = doc.to_dict()
-        data['order_id'] = doc.id  # Optional: include Firestore doc ID
-        orders.append(data)
+        if data:  # Ensure the doc is not empty
+            data['order_id'] = doc.id  # Add Firestore doc ID if needed
+            orders.append(data)
     return orders
+def get_all_orders():
+    docs = db.collection("Orders").stream()
+    return [doc.to_dict() | {"id": doc.id} for doc in docs]
 
 # ---------------- Filtering ----------------
 
