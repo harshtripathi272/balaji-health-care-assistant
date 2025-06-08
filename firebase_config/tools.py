@@ -15,6 +15,7 @@ from firebase_config.llama_index_configs import global_settings  # triggers embe
 # firebase_config/tools.py or wherever your tools are defined
 
 from firebase_config.llama_index_configs.order_index import load_orders_index
+from firebase_config.llama_index_configs.invoice_index import load_invoices_index
 
 def query_orders_semantic(query: str) -> str:
     try:
@@ -26,6 +27,15 @@ def query_orders_semantic(query: str) -> str:
     except Exception as e:
         return f"Error querying orders index: {e}"
 
+def query_invoices_semantic(query: str) -> str:
+    try:
+        index = load_invoices_index()
+        response = index.as_query_engine().query(query)
+        return str(response)
+    except FileNotFoundError:
+        return "Invoice index not found. Please build it first."
+    except Exception as e:
+        return f"Error querying orders index: {e}"
 
 # Inventory tools
 inventory_tools = [
@@ -84,7 +94,7 @@ order_tools = [
 # Append semantic search tool for orders
 order_tools.append(
     Tool(
-        name="SemanticSearchOrders",
+        name="SemanticSearchInvoices",
         func=query_orders_semantic,
         description="Semantic search over orders when exact tool is not found."
     )
@@ -99,6 +109,14 @@ invoice_tools = [
     Tool("DeleteInvoice", lambda invoice_id: delete_invoice(invoice_id) or "Deleted", "Delete invoice."),
     Tool("GetAllInvoices", lambda _: get_all_invoices(), "Get all invoices."),
 ]
+
+invoice_tools.append(
+    Tool(
+        name="SemanticSearchInvoices",
+        func=query_invoices_semantic,
+        description="Semantic search over invoices when exact tool is not found."
+    )
+)
 
 # Finance tools
 finance_tools = [
