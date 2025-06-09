@@ -1,6 +1,9 @@
 import streamlit as st
 import sys
 import os
+import pandas as pd
+from datetime import datetime, timedelta
+import logging
 
 os.environ["STREAMLIT_WATCHFILE"] = "false"
 
@@ -8,8 +11,6 @@ os.environ["STREAMLIT_WATCHFILE"] = "false"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from firebase_config.llama_index_configs import global_settings  # triggers embedding config
 
-import logging
-from datetime import datetime
 from firebase_config.agent import run_agent
 from firebase_config.inventory import (
     add_inventory_item, get_all_inventory_items, get_inventory_item_by_name,
@@ -41,15 +42,117 @@ from firebase_config.finance import (
 )
 
 # Setup logging
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="AI Business Assistant", layout="wide")
 
-tabs = st.tabs(["Inventory", "Orders", "Clients", "Suppliers", "Invoices", "Finance", "ChatBot"])
+tabs = st.tabs(["Dashboard", "Inventory", "Orders", "Clients", "Suppliers", "Invoices", "Finance", "ChatBot"])
+
+# ---------------- Dashboard ----------------
+with tabs[0]:
+    st.header("📊 Dashboard")
+
+    st.subheader("Overview")
+    try:
+        # Fetch data for metrics
+        inventory_items = get_all_inventory_items() or []
+        orders = get_all_orders() or []
+        invoices = get_all_invoices() or []
+        clients = get_all_clients() or []
+        dues = get_all_dues() or []
+        total_payments = get_total_payments() or []
+        total_expenses = get_total_expenses() or []
+        # Calculate metrics
+        total_inventory = len(inventory_items)
+        low_stock = len([i for item in inventory_items if item.get("stock_quantity", 0) < 10])
+        total_orders = len(orders)
+        total_invoices = len(invoices)
+        total_due = sum(d['total_due'] for d in dues if d.get('total_due', 0.0))
+        net_balance = total_payments - total_expenses
+
+        # Display metrics in columns
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Inventory Items", total_inventory)
+            st.metric("Low Stock Items", low_stock)
+        with col2:
+            st.metric("Total Orders", total_orders)
+            st.metric("Total Invoices", total_invoices)
+        with col3:
+            st.metric("Total Dues", f"₹{total_due:.2f}")
+            st.metric("Net Balance,", f"₹{net_balance:.2f}")
+
+        # Inventory by Category Chart
+        st.subheader("Inventory by Category")
+        try:
+            category_counts = {}
+            for item in inventory_items:
+                cat = item.get("category", "Unknown")
+                category_counts[cat] = category_counts.get(cat, 0) + 1
+            df_category = pd.DataFrame(list(category_counts.items()), columns=["Category", "Count"])
+            st.bar_chart(df_category.set_index("Category"))
+        except Exception as e:
+            logger.error(f"Error generating inventory by category chart: {e}")
+            st.error(f"Error: {e}")
+
+        # Sales Over Time (Last 30 Days)
+        st.subheader("Sales Over Time (Last 30 Days)")
+        try:
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=30)
+            orders_in_range = get_orders_by_date_range(start_date, end_date) or []
+            sales_data = {}
+            for order in orders_in_range:
+                date_str = order.get("date", end_date.isoformat()).split("T")[0]
+                amount = order.get("total_amount", 0.0)
+                sales_data[date_str] = sales_data.get(date_str, 0.0) + amount
+            df_sales = pd.DataFrame(list(sales_data.items()), columns=["Date", "Sales"])
+            df_sales["Date"] = pd.to_datetime(df_sales["Date"])
+            df_sales = df_sales.sort_values("Date")
+            st.line_chart(df_sales.set_index("Date"))
+        except Exception as e:
+            logger.error(f"Error generating sales over time chart: {e}")
+            st.error(f"Error: {e}")
+
+        # Low Stock Items Table
+        st.subheader("⚠️ Low Stock Items (Threshold: 10)")
+        try:
+            low_stock_items = get_low_stock_items(threshold=10) or []
+            if low_stock_items:
+                df_low_stock = pd.DataFrame(low_stock_items)
+                st.dataframe(df_low_stock[["name", "stock_quantity", "category"]])
+            else:
+                st.info("No low stock items found.")
+        except Exception as e:
+            logger.error(f"Error fetching low stock items for dashboard: {e}")
+            st.error(f"Error: {e}")
+
+        # Quick Links
+        st.subheader("🔗 Quick Actions")
+        col4, col5, col6 = st.columns(3)
+        with col4:
+            if st.button("Manage Inventory"):
+                st.switch_page("Inventory")
+            if st.button("View Orders"):
+                st.switch_page("Orders")
+        with col5:
+            if st.button("Manage Clients"):
+                st.switch_page("Clients")
+            if st.button("View Suppliers"):
+                st.switch_page("Suppliers")
+        with col6:
+            if st.button("Manage Invoices"):
+                st.switch_page("Invoices")
+            if st.button("View Finance"):
+                st.switch_page("Finance")
+
+    except Exception as e:
+        logger.error(f"Error loading dashboard: {e}")
+        st.error(f"Error: {e}")
 
 # ---------------- Inventory ----------------
-with tabs[0]:
+with tabs[1]:
     st.header("📦 Inventory Management")
 
     # 1. Add New Inventory Item
@@ -227,7 +330,7 @@ with tabs[0]:
                 st.error(f"Error: {e}")
 
 # ---------------- Orders ----------------
-with tabs[1]:
+with tabs[2]:
     st.header("📄 Orders")
 
     # Add Order
@@ -371,7 +474,7 @@ with tabs[1]:
             st.error(f"Error: {e}")
 
 # ---------------- Clients ----------------
-with tabs[2]:
+with tabs[3]:
     st.header("👥 Clients")
 
     # Add Client Form
@@ -530,7 +633,7 @@ with tabs[2]:
                 st.error(f"Error: {e}")
 
 # ---------------- Suppliers ----------------
-with tabs[3]:
+with tabs[4]:
     st.header("🏭 Suppliers")
 
     # Add Supplier Form
@@ -653,7 +756,7 @@ with tabs[3]:
                 st.error(f"Error: {e}")
 
 # ---------------- Invoices ----------------
-with tabs[4]:
+with tabs[5]:
     st.header("🧾 Invoices")
 
     # Add Invoice Form
@@ -743,7 +846,7 @@ with tabs[4]:
                 st.error(f"Error: {e}")
 
 # ---------------- Finance ----------------
-with tabs[5]:
+with tabs[6]:
     st.header("💰 Finance Overview")
 
     # Add Payment
@@ -801,7 +904,7 @@ with tabs[5]:
         dues = get_all_dues()
         if dues:
             for d in dues:
-                st.markdown(f"**{d['name']}** (Due: ₹{d['total_due']})")
+                st.markdown(f"**{d['name']}**: ₹{d['total_due']}")
         else:
             st.info("No dues found.")
     except Exception as e:
@@ -809,7 +912,7 @@ with tabs[5]:
         st.error(f"Error: {e}")
 
     # View Payments
-    st.subheader("🧾 All Client Payments")
+    st.subheader("🧾 All Payments")
     try:
         payments = get_payments()
         for p in payments:
@@ -831,21 +934,22 @@ with tabs[5]:
     # Finance Summary
     st.subheader("📊 Financial Summary")
     try:
-        total_in = get_total_payments()
-        total_out = get_total_expenses()
-        net = total_in - total_out
+        total_payments = get_total_payments()
+        total_expenses = get_total_expenses()
+        net = total_payments - total_expenses
         st.markdown(f"""
-            - 💸 **Total Payments Received:** ₹{total_in}
-            - 📤 **Total Expenses:** ₹{total_out}
-            - 💼 **Net Balance:** ₹{net}
-        """)
+            - 💸 **Total Payments Received**: ₹{total_payments}
+            - 📤 **Total Expenses**: ₹{total_expenses}
+            - 💰 **Net Balance**: ₹{net}
+        """
+        )
     except Exception as e:
         logger.error(f"Error generating financial summary: {e}")
         st.error(f"Error: {e}")
 
-# ---------------- ChatBot ----------------
-with tabs[6]:
-    st.header("🤖 Chat with Your AI Business Assistant")
+# --------------------------- ChatBot ------------------
+with tabs[7]:
+    st.header("🤖 Contact Form")
 
     # Initialize chat history
     if "chat_history" not in st.session_state:
@@ -875,7 +979,7 @@ with tabs[6]:
                 logger.debug(f"Bot response: {bot_response}")
             except Exception as e:
                 logger.error(f"Error running agent: {e}")
-                bot_response = f"❌ Error: {e}"
+                bot_response = f"Error: {e}"
         with st.chat_message("assistant"):
             st.markdown(bot_response)
         st.session_state.chat_history.append({"user": user_input, "bot": bot_response})

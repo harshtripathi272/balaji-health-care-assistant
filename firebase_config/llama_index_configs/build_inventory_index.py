@@ -1,7 +1,7 @@
 import os
 from llama_index.core import Document, Settings
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from firebase_config.llama_index_configs import global_settings 
+from firebase_config.llama_index_configs import global_settings
 from firebase_config.inventory import get_all_inventory_items
 from .item_index import build_items_index
 
