@@ -16,7 +16,11 @@ from firebase_config.llama_index_configs import global_settings  # triggers embe
 
 from firebase_config.llama_index_configs.order_index import load_orders_index
 from firebase_config.llama_index_configs.invoice_index import load_invoices_index
-
+from firebase_config.llama_index_configs.item_index import load_items_index
+from firebase_config.llama_index_configs.supplier_index import load_suppliers_index
+from firebase_config.llama_index_configs.client_index import load_clients_index
+from firebase_config.llama_index_configs.payment_index import load_payments_index
+from firebase_config.llama_index_configs.expense_index import load_expenses_index
 def query_orders_semantic(query: str) -> str:
     try:
         index = load_orders_index()
@@ -36,6 +40,61 @@ def query_invoices_semantic(query: str) -> str:
         return "Invoice index not found. Please build it first."
     except Exception as e:
         return f"Error querying orders index: {e}"
+    
+def query_items_semantic(query: str) -> str:
+    try:
+        index = load_items_index()
+        response = index.as_query_engine().query(query)
+        return str(response)
+    except FileNotFoundError:
+        return "Orders index not found. Please build it first."
+    except Exception as e:
+        return f"Error querying orders index: {e}"
+    
+def query_clients_semantic(query: str) -> str:
+    try:
+        index = load_clients_index()
+        response = index.as_query_engine().query(query)
+        return str(response)
+    except FileNotFoundError:
+        return "Orders index not found. Please build it first."
+    except Exception as e:
+        return f"Error querying orders index: {e}"
+    
+def query_suppliers_semantic(query: str) -> str:
+    try:
+        index = load_suppliers_index()
+        response = index.as_query_engine().query(query)
+        return str(response)
+    except FileNotFoundError:
+        return "Orders index not found. Please build it first."
+    except Exception as e:
+        return f"Error querying orders index: {e}"
+    
+def query_payments_semantic(query: str) -> str:
+    try:
+        index = load_payments_index()
+        response = index.as_query_engine().query(query)
+        return str(response)
+    except FileNotFoundError:
+        return "Orders index not found. Please build it first."
+    except Exception as e:
+        return f"Error querying orders index: {e}"
+    
+def query_expenses_semantic(query: str) -> str:
+    try:
+        index = load_expenses_index()
+        response = index.as_query_engine().query(query)
+        return str(response)
+    except FileNotFoundError:
+        return "Orders index not found. Please build it first."
+    except Exception as e:
+        return f"Error querying orders index: {e}"
+
+
+
+
+
 
 # Inventory tools
 inventory_tools = [
@@ -50,7 +109,13 @@ inventory_tools = [
     Tool("GetItemsByCategory", get_items_by_category, "Get inventory items by category."),
     Tool("GetItemsExpiringSoon", lambda _: get_items_expiring_soon(), "Get inventory items expiring soon."),
 ]
-
+inventory_tools.append(
+    Tool(
+        name="SemanticSearchInventory",
+        func=query_items_semantic,
+        description="Semantic search over orders when exact tool is not found."
+    )
+)
 # Clients tools
 client_tools = [
     Tool("GetClientByName", get_client_by_name, "Get client details by client name."),
@@ -62,6 +127,14 @@ client_tools = [
     Tool("GetClientPayments", get_client_payments, "Get payment history of a client."),
     Tool("UpdateClientDue", lambda data: update_client_due(data['client_id'], data['amount']) or "Updated", "Update client's due amount."),
 ]
+
+client_tools.append(
+    Tool(
+        name="SemanticSearchClients",
+        func=query_clients_semantic,
+        description="Semantic search over orders when exact tool is not found."
+    )
+)
 
 # Suppliers tools
 supplier_tools = [
@@ -75,6 +148,14 @@ supplier_tools = [
     Tool("UpdateSupplierDue", lambda data: update_supplier_due(data['supplier_id'], data['amount']) or "Updated", "Update supplier's due amount."),
     Tool("AddSupplyRecord", lambda data: str(add_supply_record(data)), "Add a new supply record for a supplier."),
 ]
+
+supplier_tools.append(
+    Tool(
+        name="SemanticSearchSuppliers",
+        func=query_suppliers_semantic,
+        description="Semantic search over orders when exact tool is not found."
+    )
+)
 
 # Orders tools
 order_tools = [
@@ -132,6 +213,24 @@ finance_tools = [
     Tool("GetTotalExpenses", lambda _: get_total_expenses(), "Get total expense amount."),
     Tool("GetTotalPayments", lambda _: get_total_payments(), "Get total payment amount."),
 ]
+
+finance_tools.append(
+    Tool(
+        name="SemanticSearchExpenses",
+        func=query_expenses_semantic,
+        description="Semantic search over orders when exact tool is not found."
+    )
+)
+
+finance_tools.append(
+    Tool(
+        name="SemanticSearchPayments",
+        func=query_payments_semantic,
+        description="Semantic search over orders when exact tool is not found."
+    )
+)
+
+
 
 # Combine all tools
 all_tools = (
