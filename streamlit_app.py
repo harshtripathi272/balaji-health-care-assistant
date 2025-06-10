@@ -4,7 +4,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 import logging
-
+import speech_recognition as sr
 os.environ["STREAMLIT_WATCHFILE"] = "false"
 
 # Add the root of your project to sys.path
@@ -983,3 +983,24 @@ with tabs[7]:
         with st.chat_message("assistant"):
             st.markdown(bot_response)
         st.session_state.chat_history.append({"user": user_input, "bot": bot_response})
+
+    # 1. Voice Input Button
+    st.subheader("🎤 Voice Input")
+    if st.button("Start Listening"):
+        recognizer = sr.Recognizer()
+        with sr.Microphone() as source:
+            st.info("Listening...")
+            audio = recognizer.listen(source)
+            st.success("Audio captured!")
+
+            try:
+                text = recognizer.recognize_google(audio)
+                st.success(f"Recognized: {text}")
+
+                st.info("Querying agent...")
+                response = run_agent(text)
+                st.success(f"💬 Agent: {response}")
+            except sr.UnknownValueError:
+                st.error("Could not understand the audio.")
+            except sr.RequestError as e:
+                st.error(f"Request failed: {e}")
