@@ -18,9 +18,10 @@ from firebase_config.llama_index_configs.order_index import load_orders_index
 from firebase_config.llama_index_configs.invoice_index import load_invoices_index
 from firebase_config.llama_index_configs.item_index import load_items_index
 from firebase_config.llama_index_configs.supplier_index import load_suppliers_index
-from firebase_config.llama_index_configs.client_index import load_clients_index
+# from firebase_config.llama_index_configs.client_index import load_clients_index
 from firebase_config.llama_index_configs.payment_index import load_payments_index
 from firebase_config.llama_index_configs.expense_index import load_expenses_index
+from firebase_config.llama_index_configs.client_index2 import load_clients_index
 def query_orders_semantic(query: str) -> str:
     try:
         index = load_orders_index()
@@ -54,13 +55,14 @@ def query_items_semantic(query: str) -> str:
 def query_clients_semantic(query: str) -> str:
     try:
         index = load_clients_index()
+        # print(f"✅ Loaded index, using vector store: {index._vector_store._collection_name}")
         response = index.as_query_engine().query(query)
         return str(response)
     except FileNotFoundError:
-        return "Orders index not found. Please build it first."
+        return "Clients index not found. Please build it first."
     except Exception as e:
-        return f"Error querying orders index: {e}"
-    
+        return f"Error querying clients index: {e}"
+
 def query_suppliers_semantic(query: str) -> str:
     try:
         index = load_suppliers_index()
@@ -118,15 +120,17 @@ inventory_tools.append(
 )
 # Clients tools
 client_tools = [
-    Tool("GetClientByName", get_client_by_name, "Get client details by client name."),
-    Tool("SearchClientsByPartialName", search_clients_by_partial_name, "Search clients by partial name."),
-    Tool("AddClient", lambda data: str(add_client(data)), "Add a new client."),
-    Tool("UpdateClient", lambda data: update_client(data['client_id'], data['updated_fields']) or "Updated", "Update client."),
-    Tool("DeleteClient", lambda client_id: delete_client(client_id) or "Deleted", "Delete client."),
-    Tool("GetClientOrderHistory", get_client_order_history, "Get all orders made by a specific client."),
-    Tool("GetClientPayments", get_client_payments, "Get payment history of a client."),
+    # Tool("GetClientByName", get_client_by_name, "Get client details by client name."),
+    # Tool("SearchClientsByPartialName", search_clients_by_partial_name, "Search clients by partial name."),
+    # # Tool(name="GetAllClients", func=lambda _: get_all_clients(), description="Get all clients.", return_direct=True),
+    # Tool("AddClient", lambda data: str(add_client(data)), "Add a new client."),
+    # Tool("UpdateClient", lambda data: update_client(data['client_id'], data['updated_fields']) or "Updated", "Update client."),
+    # Tool("DeleteClient", lambda client_id: delete_client(client_id) or "Deleted", "Delete client."),
+    # Tool("GetClientOrderHistory", get_client_order_history, "Get all orders made by a specific client."),
+    # Tool("GetClientPayments", get_client_payments, "Get payment history of a client."),
     Tool("UpdateClientDue", lambda data: update_client_due(data['client_id'], data['amount']) or "Updated", "Update client's due amount."),
 ]
+
 
 client_tools.append(
     Tool(
