@@ -1,0 +1,1 @@
+from llama_index.embeddings.sentence_transformers import SentenceTransformerEmbedding

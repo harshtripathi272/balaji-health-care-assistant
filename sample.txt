@@ -1,0 +1,7 @@
+Client Name: John Doe
+Age: 34
+Gender: Male
+Medical History: Type 2 Diabetes, Hypertension
+Current Medications: Metformin, Amlodipine
+Next Appointment: 2025-07-10
+Notes: Patient is responding well to treatment and advised to maintain low-sugar diet.

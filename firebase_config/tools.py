@@ -18,10 +18,10 @@ from firebase_config.llama_index_configs.order_index import load_orders_index
 from firebase_config.llama_index_configs.invoice_index import load_invoices_index
 from firebase_config.llama_index_configs.item_index import load_items_index
 from firebase_config.llama_index_configs.supplier_index import load_suppliers_index
-# from firebase_config.llama_index_configs.client_index import load_clients_index
+from firebase_config.llama_index_configs.client_index import load_clients_index
 from firebase_config.llama_index_configs.payment_index import load_payments_index
 from firebase_config.llama_index_configs.expense_index import load_expenses_index
-from firebase_config.llama_index_configs.client_index2 import load_clients_index
+# from firebase_config.llama_index_configs.client_index2 import load_clients_index
 def query_orders_semantic(query: str) -> str:
     try:
         index = load_orders_index()

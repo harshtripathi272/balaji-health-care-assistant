@@ -5,7 +5,9 @@ from qdrant_client import QdrantClient
 import logging
 from qdrant_client.http.models import VectorParams, Distance
 from dotenv import load_dotenv
+
 QDRANT_URL = os.getenv("QDRANT_URL")
+
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__file__)
@@ -30,8 +32,8 @@ except Exception as e:
 #     collection_name="clients",
 #     vectors_config=VectorParams(size=384, distance=Distance.COSINE)
 # )
-ount = qdrant_client.count(collection_name="clients").count
-# print(query_clients_semantic("Total number of clients"))
+# ount = qdrant_client.count(collection_name="clients").count
+print(query_clients_semantic("What is the due amount of Client Harsh"))
 
 
 # from qdrant_client import QdrantClient
