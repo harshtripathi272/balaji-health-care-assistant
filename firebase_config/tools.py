@@ -179,7 +179,7 @@ order_tools = [
 # Append semantic search tool for orders
 order_tools.append(
     Tool(
-        name="SemanticSearchInvoices",
+        name="SemanticSearchOrders",
         func=query_orders_semantic,
         description="Semantic search over orders when exact tool is not found."
     )

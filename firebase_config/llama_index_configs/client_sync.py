@@ -4,7 +4,7 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 from llama_index.core import Document
 from firebase_config.llama_index_configs.global_settings import global_settings
-from firebase_config.llama_index_configs.client_index2 import load_clients_index
+from firebase_config.llama_index_configs.client_index import load_clients_index
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import VectorParams, Distance
 import firebase_admin
