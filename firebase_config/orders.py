@@ -11,18 +11,9 @@ from datetime import datetime
 from google.cloud.firestore_v1 import FieldFilter
 
 def add_order(order_data: Dict) -> str:
-    """
-    Adds a new order document to Firestore using name & ID fields for client and supplier.
-    Assumes both name and ID are passed directly from the UI.
-
-    Expected fields:
-    - client_id, client_name
-    - supplier_id, supplier_name
-    - order_type, status, draft, etc.
-    """
-
     from firebase_config.config import db
     from google.cloud import firestore
+    from google.cloud.firestore_v1.base_query import FieldFilter
 
     # Extract core fields
     client_id = order_data.get("client_id", "")
@@ -45,7 +36,6 @@ def add_order(order_data: Dict) -> str:
     invoice_number = order_data.get("invoice_number") if order_type != "delivery_challan" else None
     challan_number = order_data.get("challan_number") if order_type == "delivery_challan" else None
 
-    # Process items
     processed_items = []
     total_quantity = 0
     total_tax = 0
@@ -59,7 +49,7 @@ def add_order(order_data: Dict) -> str:
         batch_number = item.get("batch_number", "")
         expiry = item.get("expiry", "")
 
-        # Lookup item_id using name
+        # Lookup item by name
         query = db.collection("Inventory Items").where(filter=FieldFilter("name", "==", item_name)).limit(1).stream()
         item_doc = next(query, None)
         if not item_doc:
@@ -67,15 +57,48 @@ def add_order(order_data: Dict) -> str:
 
         item_id = item_doc.id
         item_data = item_doc.to_dict()
+        batches = item_data.get("batches", [])
+        updated_batches = []
+        batch_found = False
 
-        # Update stock based on order type
-        current_stock = item_data.get("stock_quantity", 0)
-        new_stock = current_stock + quantity if order_type == "purchase" else current_stock - quantity
+        # Modify quantity of the specific batch
+        quantity = float(quantity)  # Ensure it's numeric
 
+        for batch in batches:
+            # Convert batch quantity safely
+            batch_qty = float(batch.get("quantity", 0))
+            if batch.get("batch_number") == batch_number:
+                batch_found = True
+                if order_type == "purchase":
+                    batch["quantity"] = batch_qty + quantity
+                elif order_type in ["sales", "delivery_challan"]:
+                    if batch_qty < quantity:
+                        raise ValueError(f"❌ Not enough stock in batch {batch_number} of item '{item_name}'.")
+                    batch["quantity"] = batch_qty - quantity
+            updated_batches.append(batch)
+
+
+        if not batch_found:
+            if order_type == "purchase":
+                # Add new batch if it doesn’t exist (for purchase only)
+                updated_batches.append({
+                    "batch_number": batch_number,
+                    "Expiry": expiry,
+                    "quantity": quantity
+                })
+            else:
+                raise ValueError(f"❌ Batch {batch_number} not found for item '{item_name}'.")
+
+        # Update total item-level quantity
+        total_item_quantity = sum(batch["quantity"] for batch in updated_batches)
+
+        # Update inventory item doc with new stock and batches
         db.collection("Inventory Items").document(item_id).update({
-            "stock_quantity": new_stock
+            "stock_quantity": total_item_quantity,
+            "batches": updated_batches
         })
 
+        # Record processed item
         processed_items.append({
             "item_id": item_id,
             "item_name": item_name,
@@ -125,6 +148,7 @@ def add_order(order_data: Dict) -> str:
     order_id = order_ref[1].id
     print(f"[✔] Order added with ID: {order_id} (type: {order_type})")
     return order_id
+
 
 
 
