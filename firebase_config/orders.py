@@ -12,75 +12,70 @@ from google.cloud.firestore_v1 import FieldFilter
 
 def add_order(order_data: Dict) -> str:
     """
-    Expects order_data in this format:
-    {
-        "client_id": str,
-        "supplier_id": Optional[str],
-        "order_type": "purchase" | "sales",
-        "status": str,
-        "items": List[{
-            "item_id": str,
-            "quantity": int,
-            "price": float,
-            "discount": float (optional),
-            "tax": float (optional),
-            "batch_number": str (optional)
-        }],
-        "total_amount": float,
-        "invoice_number": str,
-        "remarks": str (optional),
-        "updated_by": str
-    }
+    Adds a new order document to Firestore using name & ID fields for client and supplier.
+    Assumes both name and ID are passed directly from the UI.
+
+    Expected fields:
+    - client_id, client_name
+    - supplier_id, supplier_name
+    - order_type, status, draft, etc.
     """
 
-    # Resolve optional fields
-    supplier_id = order_data.get("supplier_id")
-    remarks = order_data.get("remarks", "")
+    from firebase_config.config import db
+    from google.cloud import firestore
+
+    # Extract core fields
+    client_id = order_data.get("client_id", "")
+    client_name = order_data.get("client_name", "")
+    supplier_id = order_data.get("supplier_id", "")
+    supplier_name = order_data.get("supplier_name", "")
+
+    order_type = order_data.get("order_type")
     status = order_data.get("status", "pending")
-    invoice_number = order_data.get("invoice_number")
     updated_by = order_data.get("updated_by", "system")
+    created_by = order_data.get("created_by", updated_by)
+    total_amount = order_data.get("total_amount", 0.0)
+    payment_method = order_data.get("payment_method", "unpaid")
+    amount_paid = order_data.get("amount_paid", 0.0)
+    remarks = order_data.get("remarks", "")
+    draft = order_data.get("draft", False)
+    amount_collected_by = order_data.get("amount_collected_by", "")
+    payment_status = order_data.get("payment_status", "unpaid")
 
-    # Fetch optional names for easier querying
-    client_name = ""
-    supplier_name = ""
+    invoice_number = order_data.get("invoice_number") if order_type != "delivery_challan" else None
+    challan_number = order_data.get("challan_number") if order_type == "delivery_challan" else None
 
-    if order_data["order_type"] == "sales" and order_data.get("client_id"):
-        client_doc = db.collection("Clients").document(order_data["client_id"]).get()
-        if client_doc.exists:
-            client_name = client_doc.to_dict().get("name", "")
-
-    if order_data["order_type"] == "purchase" and supplier_id:
-        supplier_doc = db.collection("Suppliers").document(supplier_id).get()
-        if supplier_doc.exists:
-            supplier_name = supplier_doc.to_dict().get("name", "")
-
-    # Process each item and update inventory
+    # Process items
     processed_items = []
+    total_quantity = 0
+    total_tax = 0
+
     for item in order_data["items"]:
-        item_id = item["item_id"]
+        item_name = item["item_name"]
         quantity = item["quantity"]
         price = item["price"]
-        discount = item.get("discount", 0)
         tax = item.get("tax", 0)
+        discount = item.get("discount", 0)
         batch_number = item.get("batch_number", "")
+        expiry = item.get("expiry", "")
 
-        # Fetch item name and update stock
-        item_doc = db.collection("Inventory Items").document(item_id).get()
-        if not item_doc.exists:
-            print(f"Item {item_id} not found.")
-            continue
+        # Lookup item_id using name
+        query = db.collection("Inventory Items").where(filter=FieldFilter("name", "==", item_name)).limit(1).stream()
+        item_doc = next(query, None)
+        if not item_doc:
+            raise ValueError(f"❌ Inventory item '{item_name}' not found.")
 
+        item_id = item_doc.id
         item_data = item_doc.to_dict()
-        item_name = item_data.get("name", "Unnamed")
 
+        # Update stock based on order type
         current_stock = item_data.get("stock_quantity", 0)
-        new_stock = current_stock + quantity if order_data["order_type"] == "purchase" else current_stock - quantity
+        new_stock = current_stock + quantity if order_type == "purchase" else current_stock - quantity
 
         db.collection("Inventory Items").document(item_id).update({
             "stock_quantity": new_stock
         })
 
-        # Append processed item
         processed_items.append({
             "item_id": item_id,
             "item_name": item_name,
@@ -88,33 +83,50 @@ def add_order(order_data: Dict) -> str:
             "price": price,
             "discount": discount,
             "tax": tax,
-            "batch_number": batch_number
+            "batch_number": batch_number,
+            "expiry": expiry
         })
 
-    # Compose the order document
+        total_quantity += quantity
+        total_tax += tax
+
+    # Timestamp
     timestamp = firestore.SERVER_TIMESTAMP
+
+    # Final Order Document
     order_doc = {
-        "client_id": order_data.get("client_id"),
+        "client_id": client_id,
         "client_name": client_name,
         "supplier_id": supplier_id,
         "supplier_name": supplier_name,
-        "order_type": order_data["order_type"],
+        "order_type": order_type,
         "order_date": timestamp,
         "status": status,
         "items": processed_items,
-        "total_amount": order_data["total_amount"],
+        "total_quantity": total_quantity,
+        "total_tax": total_tax,
+        "total_amount": total_amount,
         "invoice_number": invoice_number,
+        "challan_number": challan_number,
+        "payment_method": payment_method,
+        "amount_paid": amount_paid,
+        "payment_status": payment_status,
         "remarks": remarks,
+        "draft": draft,
+        "amount_collected_by": amount_collected_by,
+        "created_by": created_by,
+        "updated_by": updated_by,
         "created_at": timestamp,
-        "updated_at": timestamp,
-        "updated_by": updated_by
+        "updated_at": timestamp
     }
 
-    # Add to Firestore
+    # Save to Firestore
     order_ref = db.collection("Orders").add(order_doc)
     order_id = order_ref[1].id
-    print(f"[✔] Order added with ID: {order_id} and Invoice: {invoice_number}")
+    print(f"[✔] Order added with ID: {order_id} (type: {order_type})")
     return order_id
+
+
 
 
 def get_order_by_id(order_id: str) -> Optional[Dict]:
@@ -192,3 +204,25 @@ def delete_order(order_id: str):
 def search_orders_by_invoice_number(invoice_number: str) -> List[Dict]:
     docs = db.collection("Orders").where(filter=FieldFilter("invoice_number", "==", invoice_number)).stream()
     return [doc.to_dict() | {"id": doc.id} for doc in docs]
+
+def get_invoice_by_order_id(order_id: str) -> Optional[Dict]:
+    doc = db.collection("Orders").document(order_id).get()
+    if doc.exists:
+        data = doc.to_dict()
+        return {
+            "invoice_number": data.get("invoice_number"),
+            "due_date": data.get("due_date"),
+            "payment_status": data.get("payment_status"),
+            "amount_paid": data.get("amount_paid"),
+            "total_amount": data.get("total_amount"),
+            "client_id": data.get("client_id"),
+            "client_name": data.get("client_name"),
+            "items": data.get("items", []),
+            "order_id": doc.id
+        }
+    return None
+
+def search_orders_by_invoice_number(invoice_number: str) -> List[Dict]:
+    docs = db.collection("Orders").where(filter=FieldFilter("invoice_number", "==", invoice_number)).stream()
+    return [doc.to_dict() | {"id": doc.id} for doc in docs]
+

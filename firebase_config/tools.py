@@ -2,7 +2,7 @@ from langchain.tools import Tool
 from firebase_config.inventory import *
 from firebase_config.clients import *
 from firebase_config.finance import *
-from firebase_config.invoices import *
+
 from firebase_config.orders import *
 from firebase_config.suppliers import *
 from firebase_config.llama_index_configs.order_index import load_orders_index
@@ -167,14 +167,21 @@ order_tools = [
     Tool("AddOrder", lambda data: str(add_order(data)), "Add a new order."),
     Tool("UpdateOrder", lambda data: update_order(data['order_id'], data['updated_fields']) or "Updated", "Update order."),
     Tool("DeleteOrder", lambda order_id: delete_order(order_id) or "Deleted", "Delete order."),
+    
     Tool("GetOrdersByClient", get_orders_by_client, "Get orders made by a client."),
-    Tool("GetOrdersByDateRange", lambda data: get_orders_by_date_range(data['start_date'], data['end_date']), "Get orders within a date range."),
-    Tool("GetOrdersByStatus", get_orders_by_status, "Get orders by status."),
     Tool("GetOrdersBySupplier", get_orders_by_supplier, "Get orders made from a supplier."),
+    Tool("GetOrdersByStatus", get_orders_by_status, "Get orders by status."),
+    Tool("GetOrdersByDateRange", lambda data: get_orders_by_date_range(data['start_date'], data['end_date']), "Get orders within a date range."),
     Tool("GetTotalSalesInPeriod", lambda data: get_total_sales_in_period(data['start_date'], data['end_date']), "Get total sales in a given period."),
-    Tool(name="GetAllOrders", func=lambda _: get_all_orders(), description="Get all orders.", return_direct=True),
+
+    Tool("GetAllOrders", lambda _: get_all_orders(), "Get all orders.", return_direct=True),
+    
+    # 🔍 Invoice-related tools (now inside Orders)
     Tool("SearchOrdersByInvoiceNumber", search_orders_by_invoice_number, "Search orders by invoice number."),
+    Tool("GetInvoiceByOrderId", get_invoice_by_order_id, "Get invoice details using order ID."),
+    
 ]
+
 
 # Append semantic search tool for orders
 order_tools.append(
@@ -186,22 +193,16 @@ order_tools.append(
 )
 
 # Invoices tools
-invoice_tools = [
-    Tool("GetInvoiceByNumber", get_invoice_by_number, "Get invoice details by invoice number."),
-    Tool("GetInvoiceById", get_invoice_by_id, "Get invoice details by invoice ID."),
-    Tool("AddInvoice", lambda data: str(add_invoice(data)), "Add a new invoice."),
-    Tool("UpdateInvoice", lambda data: update_invoice(data['invoice_id'], data['updated_fields']) or "Updated", "Update invoice."),
-    Tool("DeleteInvoice", lambda invoice_id: delete_invoice(invoice_id) or "Deleted", "Delete invoice."),
-    Tool("GetAllInvoices", lambda _: get_all_invoices(), "Get all invoices."),
-]
+# invoice_tools = [
+#     Tool("GetInvoiceByNumber", get_invoice_by_number, "Get invoice details by invoice number."),
+#     Tool("GetInvoiceById", get_invoice_by_id, "Get invoice details by invoice ID."),
+#     Tool("AddInvoice", lambda data: str(add_invoice(data)), "Add a new invoice."),
+#     Tool("UpdateInvoice", lambda data: update_invoice(data['invoice_id'], data['updated_fields']) or "Updated", "Update invoice."),
+#     Tool("DeleteInvoice", lambda invoice_id: delete_invoice(invoice_id) or "Deleted", "Delete invoice."),
+#     Tool("GetAllInvoices", lambda _: get_all_invoices(), "Get all invoices."),
+# ]
 
-invoice_tools.append(
-    Tool(
-        name="SemanticSearchInvoices",
-        func=query_invoices_semantic,
-        description="Semantic search over invoices when exact tool is not found."
-    )
-)
+
 
 # Finance tools
 finance_tools = [
@@ -242,6 +243,6 @@ all_tools = (
     client_tools +
     supplier_tools +
     order_tools +
-    invoice_tools +
+    
     finance_tools
 )

@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import logging
 import speech_recognition as sr
 os.environ["STREAMLIT_WATCHFILE"] = "false"
+import torch
+torch._classes = None  # avoid __getattr__ error during reloads
 
 # Add the root of your project to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -333,26 +335,121 @@ with tabs[1]:
 with tabs[2]:
     st.header("📄 Orders")
 
-    # Add Order
+    # Add Order Section
     st.subheader("➕ Add Order")
-    with st.form("Add Order"):
+    with st.form("Add Order Form"):
+
+        # Client Info
         client_name = st.text_input("Client Name")
-        items = st.text_area("Items (comma-separated)")
-        total_amount = st.number_input("Total Amount")
-        order_type = st.radio("Order Type", ["Purchase", "Sell"])
-        submitted = st.form_submit_button("Add Order")
+        client_id = st.text_input("Client ID (auto-filled by UI)")
+
+        # Order Type
+        order_type = st.radio("Order Type", ["purchase", "sales", "delivery_challan"])
+
+        # Supplier Info (only if purchase)
+        supplier_name, supplier_id = "", ""
+        if order_type == "purchase":
+            supplier_name = st.text_input("Supplier Name")
+            supplier_id = st.text_input("Supplier ID (auto-filled by UI)")
+
+        # Items Section
+        num_items = st.number_input("Number of Items", min_value=1, value=1, step=1)
+        items = []
+
+        st.markdown("### 📦 Items")
+        for i in range(num_items):
+            with st.expander(f"🧾 Item {i+1}", expanded=True):
+                item_name = st.text_input("Item Name", key=f"item_name_{i}")
+                quantity = st.number_input("Quantity", min_value=1, key=f"qty_{i}")
+                price = st.number_input("Price (₹)", min_value=0.0, key=f"price_{i}")
+                tax = st.number_input("Tax (%)", min_value=0.0, key=f"tax_{i}")
+                batch_number = st.text_input("Batch Number", key=f"batch_{i}")
+                expiry = st.text_input("Expiry (MM/YYYY)", key=f"expiry_{i}")
+
+                items.append({
+                    "item_name": item_name.strip(),
+                    "quantity": quantity,
+                    "price": price,
+                    "tax": tax,
+                    "batch_number": batch_number,
+                    "expiry": expiry
+                })
+
+        # Invoice / Challan
+        st.markdown("### 📄 Invoice / Challan Info")
+        invoice_number, challan_number = None, None
+        if order_type == "delivery_challan":
+            challan_number = st.text_input("Challan Number")
+        else:
+            invoice_number = st.text_input("Invoice Number")
+
+        # Payment Info
+        st.markdown("### 💰 Payment Details")
+        total_amount = st.number_input("Total Amount (₹)", min_value=0.0)
+        amount_paid = st.number_input("Amount Paid (₹)", min_value=0.0)
+        payment_method = st.selectbox("Payment Method", ["cash", "UPI", "bank", "unpaid"])
+        payment_status = st.selectbox("Payment Status", ["unpaid", "partial", "paid"])
+
+        # Order Meta
+        status = st.selectbox("Order Status", ["pending", "completed"])
+        remarks = st.text_area("Remarks")
+
+        st.markdown("### 🧑‍💻 Admin Info")
+        draft = st.checkbox("Is Draft?", value=False)
+        updated_by = st.text_input("Updated By", value="admin")
+        created_by = st.text_input("Created By", value="admin")
+        amount_collected_by = st.text_input("Amount Collected By", value="")
+
+        submitted = st.form_submit_button("Submit Order")
+
         if submitted:
             try:
-                order_id = add_order({
+                # ✅ Validate required fields
+                if not client_id or not client_name:
+                    st.error("❌ Client ID and Name are required.")
+                    st.stop()
+
+                if order_type == "purchase" and (not supplier_id or not supplier_name):
+                    st.error("❌ Supplier ID and Name are required for purchase orders.")
+                    st.stop()
+
+                # ✅ Validate items
+                for idx, item in enumerate(items):
+                    if not item["item_name"]:
+                        st.error(f"❌ Item #{idx+1} is missing a name.")
+                        st.stop()
+
+                # ✅ Build order_data dict
+                order_data = {
+                    "client_id": client_id,
                     "client_name": client_name,
-                    "items": [i.strip() for i in items.split(",")],
+                    "supplier_id": supplier_id,
+                    "supplier_name": supplier_name,
+                    "order_type": order_type,
+                    "status": status,
+                    "items": items,
                     "total_amount": total_amount,
-                    "order_type": order_type.lower()
-                })
-                st.success(f"Order added! ID: {order_id}")
+                    "invoice_number": invoice_number,
+                    "challan_number": challan_number,
+                    "payment_method": payment_method,
+                    "amount_paid": amount_paid,
+                    "payment_status": payment_status,
+                    "remarks": remarks,
+                    "draft": draft,
+                    "updated_by": updated_by,
+                    "created_by": created_by,
+                    "amount_collected_by": amount_collected_by
+                }
+
+                # 🔄 Add to Firestore
+                order_id = add_order(order_data)
+                st.success(f"✅ Order added successfully! ID: {order_id}")
+
             except Exception as e:
-                logger.error(f"Error adding order: {e}")
+                logger.error(f"[❌] Error adding order: {e}")
                 st.error(f"Error: {e}")
+
+
 
     # View All Orders
     st.subheader("📋 All Orders")
