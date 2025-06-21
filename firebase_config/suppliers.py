@@ -6,12 +6,33 @@ from google.cloud.firestore_v1 import FieldFilter
 # Add a new supplier
 from google.cloud import firestore
 
-def add_supplier(supplier_data):
-    supplier_data["created_at"] = firestore.SERVER_TIMESTAMP
-    supplier_data["updated_at"] = firestore.SERVER_TIMESTAMP
-    # Optional: add `updated_by` if tracking user
-    doc_ref = db.collection("Suppliers").add(supplier_data)
-    return doc_ref[1].id
+def get_next_id(prefix: str, counter_name: str) -> str:
+    counter_ref = db.collection("doc_counters").document(counter_name)
+    counter_doc = counter_ref.get()
+
+    if not counter_doc.exists:
+        counter_ref.set({"last_id": 1})
+        next_id = 1
+    else:
+        counter_ref.update({"last_id": firestore.Increment(1)})
+        next_id = counter_doc.to_dict()["last_id"] + 1
+
+    return f"{prefix}{next_id:04d}"
+
+def add_supplier(supplier_data: Dict) -> str:
+    supplier_id = get_next_id("S", "suppliers")
+    supplier_doc = {
+        "id": supplier_id,
+        "name": supplier_data.get("name", ""),
+        "contact": supplier_data.get("contact", ""),
+        "due": 0,
+        "address": supplier_data.get("address", ""),
+        "created_at": firestore.SERVER_TIMESTAMP,
+        "updated_at": firestore.SERVER_TIMESTAMP
+    }
+    db.collection("Suppliers").document(supplier_id).set(supplier_doc)
+    return supplier_id
+
 
 
 # Get supplier by exact name

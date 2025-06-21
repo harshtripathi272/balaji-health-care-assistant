@@ -31,9 +31,16 @@ def get_all_dues() -> list:
 
 # ------------------------ Expenses ------------------------
 
-def add_expense(expense_data: dict) -> str:
-    expense_data["date"] = expense_data.get("date", firestore.SERVER_TIMESTAMP)
-    doc_ref = db.collection("Expenses").add(expense_data)
+def add_expense(expense_data: Dict) -> str:
+    expense_doc = {
+        "amount": float(expense_data.get("amount", 0)),
+        "category": expense_data.get("category", ""),
+        "paid_by": expense_data.get("paid_by", ""),
+        "remarks": expense_data.get("remarks", ""),
+        "created_at": firestore.SERVER_TIMESTAMP,
+        "updated_at": firestore.SERVER_TIMESTAMP
+    }
+    doc_ref = db.collection("Expenses").add(expense_doc)
     return doc_ref[1].id
 
 def get_expenses(category=None, start_date=None, end_date=None) -> list:

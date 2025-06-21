@@ -5,11 +5,37 @@ from typing import List, Dict
 from google.cloud.firestore_v1 import FieldFilter
 # ------------------------ Clients ------------------------
 
-def add_client(client_data: dict) -> str:
-    client_data["created_at"] = firestore.SERVER_TIMESTAMP
-    client_data["updated_at"] = firestore.SERVER_TIMESTAMP
-    doc_ref = db.collection("clients").add(client_data)
-    return doc_ref[1].id
+def get_next_id(prefix: str, counter_name: str) -> str:
+    counter_ref = db.collection("doc_counters").document(counter_name)
+    counter_doc = counter_ref.get()
+
+    if not counter_doc.exists:
+        counter_ref.set({"last_id": 1})
+        next_id = 1
+    else:
+        counter_ref.update({"last_id": firestore.Increment(1)})
+        next_id = counter_doc.to_dict()["last_id"] + 1
+
+    return f"{prefix}{next_id:04d}"
+
+
+def add_client(client_data: Dict) -> str:
+    client_id = get_next_id("C", "clients")
+    client_doc = {
+        "id": client_id,
+        "name": client_data.get("name", ""),
+        "PAN": client_data.get("PAN", ""),
+        "GST": client_data.get("GST", ""),
+        "POC_name": client_data.get("POC_name", ""),
+        "POC_contact": client_data.get("POC_contact", ""),
+        "due_amount": 0,
+        "address": client_data.get("address", ""),
+        "created_at": firestore.SERVER_TIMESTAMP,
+        "updated_at": firestore.SERVER_TIMESTAMP
+    }
+    db.collection("Clients").document(client_id).set(client_doc)
+    return client_id
+
 
 def get_client_by_name(name: str) -> list:
     docs = db.collection("Clients").where(filter=FieldFilter("name", "==", name)).stream()

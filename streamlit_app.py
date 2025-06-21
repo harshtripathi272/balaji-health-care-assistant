@@ -12,7 +12,7 @@ torch._classes = None  # avoid __getattr__ error during reloads
 # Add the root of your project to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from firebase_config.llama_index_configs import global_settings  # triggers embedding config
-
+from firebase_config.employess import *
 from firebase_config.agent import run_agent
 from firebase_config.inventory import (
     add_inventory_item, get_all_inventory_items, get_inventory_item_by_name,
@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="AI Business Assistant", layout="wide")
 
-tabs = st.tabs(["Dashboard", "Inventory", "Orders", "Clients", "Suppliers", "Invoices", "Finance", "ChatBot"])
+tabs = st.tabs(["Dashboard", "Inventory", "Orders", "Clients", "Suppliers", "Employees", "Finance", "ChatBot"])
 
 # ---------------- Dashboard ----------------
 with tabs[0]:
@@ -67,7 +67,7 @@ with tabs[0]:
         total_expenses = get_total_expenses() or []
         # Calculate metrics
         total_inventory = len(inventory_items)
-        low_stock = len([i for item in inventory_items if item.get("stock_quantity", 0) < 10])
+        low_stock = len([item for item in inventory_items if item.get("stock_quantity", 0) < 10])
         total_orders = len(orders)
         total_invoices = len(invoices)
         total_due = sum(d['total_due'] for d in dues if d.get('total_due', 0.0))
@@ -161,22 +161,30 @@ with tabs[1]:
     st.subheader("➕ Add New Inventory Item")
     with st.form("Add Inventory"):
         name = st.text_input("Item Name")
-        category = st.selectbox("Category", ["blood tubing", "chemical", "CITOS", "dialysers", "diasafe", "machine", "needle", "other item", "spare", "surgical"])
-        quantity = st.number_input("Stock Quantity", min_value=0)
-        unit_price = st.number_input("Unit Price")
+        category = st.selectbox("Category", [
+            "blood tubing", "chemical", "CITOS", "dialysers", "diasafe",
+            "machine", "needle", "other item", "spare", "surgical"
+        ])
+        low_stock_threshold = st.number_input("Low Stock Threshold", min_value=0.0, value=10.0)
+        unit_price = st.number_input("Unit Price", min_value=0.0)
+
         submitted = st.form_submit_button("Add Item")
         if submitted:
             try:
+                # You can generate item_id here like "I0001" if needed
                 add_inventory_item({
                     "name": name,
                     "category": category,
-                    "stock_quantity": quantity,
-                    "unit_price": unit_price
+                    "low_stock": low_stock_threshold,
+                    "unit_price": unit_price,
+                    "stock_quantity": 0,
+                    "batches": []
                 })
-                st.success("✅ Item added successfully!")
+                st.success("✅ Inventory item added (waiting for stock via orders)")
             except Exception as e:
                 logger.error(f"Error adding inventory item: {e}")
                 st.error(f"Error: {e}")
+
 
     # 2. View All Items
     st.subheader("📋 All Inventory Items")
@@ -339,16 +347,16 @@ with tabs[2]:
     st.subheader("➕ Add Order")
     with st.form("Add Order Form"):
 
-        # Client Info
-        client_name = st.text_input("Client Name")
-        client_id = st.text_input("Client ID (auto-filled by UI)")
-
         # Order Type
         order_type = st.radio("Order Type", ["purchase", "sales", "delivery_challan"])
 
-        # Supplier Info (only if purchase)
-        supplier_name, supplier_id = "", ""
-        if order_type == "purchase":
+        # Client or Supplier Info based on order type
+        client_id = client_name = supplier_id = supplier_name = ""
+
+        if order_type in ["sales", "delivery_challan"]:
+            client_name = st.text_input("Client Name")
+            client_id = st.text_input("Client ID (auto-filled by UI)")
+        elif order_type == "purchase":
             supplier_name = st.text_input("Supplier Name")
             supplier_id = st.text_input("Supplier ID (auto-filled by UI)")
 
@@ -377,7 +385,7 @@ with tabs[2]:
 
         # Invoice / Challan
         st.markdown("### 📄 Invoice / Challan Info")
-        invoice_number, challan_number = None, None
+        invoice_number = challan_number = None
         if order_type == "delivery_challan":
             challan_number = st.text_input("Challan Number")
         else:
@@ -394,6 +402,7 @@ with tabs[2]:
         status = st.selectbox("Order Status", ["pending", "completed"])
         remarks = st.text_area("Remarks")
 
+        # Admin Info
         st.markdown("### 🧑‍💻 Admin Info")
         draft = st.checkbox("Is Draft?", value=False)
         updated_by = st.text_input("Updated By", value="admin")
@@ -404,27 +413,23 @@ with tabs[2]:
 
         if submitted:
             try:
-                # ✅ Validate required fields
-                if not client_id or not client_name:
-                    st.error("❌ Client ID and Name are required.")
-                    st.stop()
+                # 🔍 Validation
+                if order_type in ["sales", "delivery_challan"]:
+                    if not client_id or not client_name:
+                        st.error("❌ Client ID and Name are required for sales/delivery orders.")
+                        st.stop()
+                elif order_type == "purchase":
+                    if not supplier_id or not supplier_name:
+                        st.error("❌ Supplier ID and Name are required for purchase orders.")
+                        st.stop()
 
-                if order_type == "purchase" and (not supplier_id or not supplier_name):
-                    st.error("❌ Supplier ID and Name are required for purchase orders.")
-                    st.stop()
-
-                # ✅ Validate items
                 for idx, item in enumerate(items):
                     if not item["item_name"]:
                         st.error(f"❌ Item #{idx+1} is missing a name.")
                         st.stop()
 
-                # ✅ Build order_data dict
+                # ✅ Construct Order Data
                 order_data = {
-                    "client_id": client_id,
-                    "client_name": client_name,
-                    "supplier_id": supplier_id,
-                    "supplier_name": supplier_name,
                     "order_type": order_type,
                     "status": status,
                     "items": items,
@@ -441,7 +446,14 @@ with tabs[2]:
                     "amount_collected_by": amount_collected_by
                 }
 
-                # 🔄 Add to Firestore
+                if order_type in ["sales", "delivery_challan"]:
+                    order_data["client_id"] = client_id
+                    order_data["client_name"] = client_name
+                if order_type == "purchase":
+                    order_data["supplier_id"] = supplier_id
+                    order_data["supplier_name"] = supplier_name
+
+                # 📝 Add Order to Firestore
                 order_id = add_order(order_data)
                 st.success(f"✅ Order added successfully! ID: {order_id}")
 
@@ -576,22 +588,36 @@ with tabs[3]:
 
     # Add Client Form
     with st.form("Add Client"):
-        name = st.text_input("Client Name")
-        email = st.text_input("Email")
-        phone = st.text_input("Phone")
+        col1, col2 = st.columns(2)
+        with col1:
+            name = st.text_input("Client Name")
+            client_id = st.text_input("Client ID (e.g., C0001)")
+            pan = st.text_input("PAN")
+            gst = st.text_input("GST")
+        with col2:
+            poc_name = st.text_input("POC Name (Contact Person)")
+            poc_contact = st.text_input("POC Contact")
+            address = st.text_area("Address")
+
         submitted = st.form_submit_button("Add Client")
+
         if submitted:
             try:
-                client_id = add_client({
+                add_client({
+                    "id": client_id,
                     "name": name,
-                    "email": email,
-                    "phone": phone,
-                    "total_due": 0.0
+                    "PAN": pan,
+                    "GST": gst,
+                    "POC_name": poc_name,
+                    "POC_contact": poc_contact,
+                    "due_amount": 0.0,
+                    "address": address
                 })
-                st.success(f"Client added! ID: {client_id}")
+                st.success(f"✅ Client '{name}' added with ID: {client_id}")
             except Exception as e:
                 logger.error(f"Error adding client: {e}")
-                st.error(f"Error: {e}")
+                st.error(f"❌ Error: {e}")
+
 
     # View All Clients
     st.subheader("📋 All Clients")
@@ -736,25 +762,31 @@ with tabs[4]:
     # Add Supplier Form
     with st.form("Add Supplier"):
         st.subheader("➕ Add New Supplier")
-        name = st.text_input("Supplier Name")
-        contact_person = st.text_input("Contact Person")
-        phone = st.text_input("Phone")
-        items = st.text_area("Items Supplied (comma-separated)")
+        col1, col2 = st.columns(2)
+        with col1:
+            supplier_id = st.text_input("Supplier ID (e.g., S0001)")
+            name = st.text_input("Supplier Name")
+            contact = st.text_input("Contact Number")
+        with col2:
+            address = st.text_area("Supplier Address")
+
         submitted = st.form_submit_button("Add Supplier")
+
         if submitted:
             try:
                 supplier_data = {
+                    "id": supplier_id,
                     "name": name,
-                    "contact_person": contact_person,
-                    "phone": phone,
-                    "items_supplied": [i.strip() for i in items.split(",")],
-                    "total_due": 0.0
+                    "contact": contact,
+                    "due": 0.0,
+                    "address": address
                 }
                 add_supplier(supplier_data)
-                st.success("✅ Supplier added successfully!")
+                st.success(f"✅ Supplier '{name}' added with ID: {supplier_id}")
             except Exception as e:
                 logger.error(f"Error adding supplier: {e}")
-                st.error(f"Error: {e}")
+                st.error(f"❌ Error: {e}")
+
 
     # All Suppliers
     st.subheader("📋 All Suppliers")
@@ -854,37 +886,35 @@ with tabs[4]:
 
 # ---------------- Invoices ----------------
 with tabs[5]:
-    st.header("🧾 Invoices")
+    st.header("👨‍💼 Employees")
 
-    # Add Invoice Form
-    with st.form("Add Invoice"):
-        st.subheader("➕ Add New Invoice")
-        invoice_number = st.text_input("Invoice Number")
-        client_id = st.text_input("Client ID")
-        client_name = st.text_input("Client Name")
-        date = st.date_input("Invoice Date", value=datetime.today())
-        items_raw = st.text_area("Items (JSON format)", help='Example: [{"item_name":"Bizaic","quantity":1,"unit_price":60000}]')
-        total_amount = st.number_input("Total Amount", min_value=0.0, format="%.2f")
-        status = st.selectbox("Status", ["paid", "pending", "overdue"])
-        submitted = st.form_submit_button("Add Invoice")
+    # Add Employee Form
+    with st.form("Add Employee"):
+        st.subheader("➕ Add New Employee")
+        col1, col2 = st.columns(2)
+        with col1:
+            employee_id = st.text_input("Employee ID (e.g., E0001)")
+            name = st.text_input("Employee Name")
+        with col2:
+            collected = st.number_input("Initial Amount Collected", min_value=0.0)
+            paid = st.number_input("Initial Amount Paid", min_value=0.0)
+
+        submitted = st.form_submit_button("Add Employee")
+
         if submitted:
             try:
-                import json
-                items = json.loads(items_raw)
-                invoice_data = {
-                    "invoice_number": invoice_number,
-                    "client_id": client_id,
-                    "client_name": client_name,
-                    "date": date.isoformat(),
-                    "items": items,
-                    "total_amount": total_amount,
-                    "status": status,
+                employee_data = {
+                    "id": employee_id,
+                    "name": name,
+                    "collected": collected,
+                    "paid": paid
                 }
-                invoice_id = add_invoice(invoice_data)
-                st.success(f"Invoice added with ID: {invoice_id}")
+                add_employee(employee_data)
+                st.success(f"✅ Employee '{name}' added with ID: {employee_id}")
             except Exception as e:
-                logger.error(f"Error adding invoice: {e}")
-                st.error(f"Error: {e}")
+                logger.error(f"Error adding employee: {e}")
+                st.error(f"❌ Error: {e}")
+
 
     # All Invoices
     st.subheader("📋 All Invoices")
@@ -973,27 +1003,33 @@ with tabs[6]:
                 st.error(f"Error: {e}")
 
     # Add Expense
+    
     st.subheader("📤 Record Expense")
+
     with st.form("Add Expense"):
         category = st.selectbox("Category", ["rent", "electricity", "salary", "supplies", "transport", "other"])
         amount = st.number_input("Expense Amount", min_value=0.0, key="expense_amount")
-        paid_to = st.text_input("Paid To")
-        description = st.text_area("Description")
+        paid_by = st.text_input("Paid By (e.g., Employee Name or ID)")
+        remarks = st.text_area("Remarks / Description")
+
         submit_expense = st.form_submit_button("Record Expense")
+
         if submit_expense:
             try:
                 from google.cloud import firestore
                 add_expense({
-                    "category": category,
                     "amount": amount,
-                    "date": firestore.SERVER_TIMESTAMP,
-                    "paid_to": paid_to,
-                    "description": description
+                    "category": category,
+                    "paid_by": paid_by,
+                    "remarks": remarks,
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "updated_at": firestore.SERVER_TIMESTAMP
                 })
-                st.success("Expense recorded!")
+                st.success("✅ Expense recorded successfully!")
             except Exception as e:
                 logger.error(f"Error adding expense: {e}")
-                st.error(f"Error: {e}")
+                st.error(f"❌ Error: {e}")
+
 
     # View Dues
     st.subheader("📋 Clients with Dues")

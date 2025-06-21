@@ -10,24 +10,39 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from google.cloud.firestore_v1 import FieldFilter
 
+from firebase_config.config import db
+from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
+from typing import Dict
+
 def add_order(order_data: Dict) -> str:
     from firebase_config.config import db
     from google.cloud import firestore
     from google.cloud.firestore_v1.base_query import FieldFilter
 
-    # Extract core fields
+    # Core fields
     client_id = order_data.get("client_id", "")
     client_name = order_data.get("client_name", "")
     supplier_id = order_data.get("supplier_id", "")
     supplier_name = order_data.get("supplier_name", "")
+    order_type = order_data.get("order_type", "").lower().strip()
 
-    order_type = order_data.get("order_type")
+    # Validate required fields based on order type
+    if order_type in ["sell", "sales", "delivery_challan"]:
+        if not client_id or not client_name:
+            raise ValueError("❌ Client ID and Name are required for sales or delivery orders.")
+    elif order_type == "purchase":
+        if not supplier_id or not supplier_name:
+            raise ValueError("❌ Supplier ID and Name are required for purchase orders.")
+    else:
+        raise ValueError("❌ Invalid order_type.")
+
     status = order_data.get("status", "pending")
     updated_by = order_data.get("updated_by", "system")
     created_by = order_data.get("created_by", updated_by)
-    total_amount = order_data.get("total_amount", 0.0)
+    total_amount = float(order_data.get("total_amount", 0))
     payment_method = order_data.get("payment_method", "unpaid")
-    amount_paid = order_data.get("amount_paid", 0.0)
+    amount_paid = float(order_data.get("amount_paid", 0))
     remarks = order_data.get("remarks", "")
     draft = order_data.get("draft", False)
     amount_collected_by = order_data.get("amount_collected_by", "")
@@ -36,20 +51,25 @@ def add_order(order_data: Dict) -> str:
     invoice_number = order_data.get("invoice_number") if order_type != "delivery_challan" else None
     challan_number = order_data.get("challan_number") if order_type == "delivery_challan" else None
 
+    # Set order_id based on invoice/challan number
+    order_id = invoice_number or challan_number
+    if not order_id:
+        raise ValueError("❌ Order must have an invoice_number or challan_number to be used as Order ID.")
+
     processed_items = []
     total_quantity = 0
     total_tax = 0
 
     for item in order_data["items"]:
         item_name = item["item_name"]
-        quantity = item["quantity"]
-        price = item["price"]
-        tax = item.get("tax", 0)
-        discount = item.get("discount", 0)
+        quantity = float(item["quantity"])
+        price = float(item["price"])
+        tax = float(item.get("tax", 0))
+        discount = float(item.get("discount", 0))
         batch_number = item.get("batch_number", "")
         expiry = item.get("expiry", "")
 
-        # Lookup item by name
+        # Get inventory item
         query = db.collection("Inventory Items").where(filter=FieldFilter("name", "==", item_name)).limit(1).stream()
         item_doc = next(query, None)
         if not item_doc:
@@ -61,26 +81,20 @@ def add_order(order_data: Dict) -> str:
         updated_batches = []
         batch_found = False
 
-        # Modify quantity of the specific batch
-        quantity = float(quantity)  # Ensure it's numeric
-
         for batch in batches:
-            # Convert batch quantity safely
             batch_qty = float(batch.get("quantity", 0))
             if batch.get("batch_number") == batch_number:
                 batch_found = True
                 if order_type == "purchase":
                     batch["quantity"] = batch_qty + quantity
-                elif order_type in ["sales", "delivery_challan"]:
+                elif order_type in ["sell", "sales", "delivery_challan"]:
                     if batch_qty < quantity:
                         raise ValueError(f"❌ Not enough stock in batch {batch_number} of item '{item_name}'.")
                     batch["quantity"] = batch_qty - quantity
             updated_batches.append(batch)
 
-
         if not batch_found:
             if order_type == "purchase":
-                # Add new batch if it doesn’t exist (for purchase only)
                 updated_batches.append({
                     "batch_number": batch_number,
                     "Expiry": expiry,
@@ -89,16 +103,13 @@ def add_order(order_data: Dict) -> str:
             else:
                 raise ValueError(f"❌ Batch {batch_number} not found for item '{item_name}'.")
 
-        # Update total item-level quantity
         total_item_quantity = sum(batch["quantity"] for batch in updated_batches)
 
-        # Update inventory item doc with new stock and batches
         db.collection("Inventory Items").document(item_id).update({
             "stock_quantity": total_item_quantity,
             "batches": updated_batches
         })
 
-        # Record processed item
         processed_items.append({
             "item_id": item_id,
             "item_name": item_name,
@@ -113,10 +124,8 @@ def add_order(order_data: Dict) -> str:
         total_quantity += quantity
         total_tax += tax
 
-    # Timestamp
     timestamp = firestore.SERVER_TIMESTAMP
 
-    # Final Order Document
     order_doc = {
         "client_id": client_id,
         "client_name": client_name,
@@ -143,11 +152,39 @@ def add_order(order_data: Dict) -> str:
         "updated_at": timestamp
     }
 
-    # Save to Firestore
-    order_ref = db.collection("Orders").add(order_doc)
-    order_id = order_ref[1].id
+    # Save using custom ID
+    db.collection("Orders").document(order_id).set(order_doc)
     print(f"[✔] Order added with ID: {order_id} (type: {order_type})")
+
+    # -------------------- Due Logic --------------------
+    due = total_amount - amount_paid
+
+    if order_type in ["delivery_challan", "sales"] and due > 0 and client_id:
+        if not client_id and order_type in ["delivery_challan", "sales"]:
+            raise ValueError("❌ client_id is empty!")
+        db.collection("Clients").document(client_id).update({
+            "due_amount": firestore.Increment(due)
+        })
+        print(f"[✔] Updated client due: ₹{due}")
+
+    elif order_type == "purchase" and due > 0 and supplier_id:
+        if not supplier_id and order_type == "purchase":
+            raise ValueError("❌ supplier_id is empty!")
+        db.collection("Suppliers").document(supplier_id).update({
+            "due": firestore.Increment(due)
+        })
+        print(f"[✔] Updated supplier due: ₹{due}")
+
+    if amount_collected_by and amount_paid > 0:
+        if not amount_collected_by and amount_paid > 0:
+            raise ValueError("❌ amount_collected_by is empty despite amount being paid!")
+        db.collection("Employees").document(amount_collected_by).update({
+            "collected": firestore.Increment(amount_paid)
+        })
+        print(f"[✔] Updated collected for employee {amount_collected_by}: ₹{amount_paid}")
+
     return order_id
+
 
 
 
