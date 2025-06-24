@@ -47,6 +47,9 @@ def add_order(order_data: Dict) -> str:
     draft = order_data.get("draft", False)
     amount_collected_by = order_data.get("amount_collected_by", "")
     payment_status = order_data.get("payment_status", "unpaid")
+    link = order_data.get("link", "")
+    discount_type = order_data.get("discount_type","percentage")
+    discount = order_data.gete("dicount", 0)
 
     invoice_number = order_data.get("invoice_number") if order_type != "delivery_challan" else None
     challan_number = order_data.get("challan_number") if order_type == "delivery_challan" else None
@@ -145,6 +148,9 @@ def add_order(order_data: Dict) -> str:
         "payment_status": payment_status,
         "remarks": remarks,
         "draft": draft,
+        "link": link,
+        "discount type":discount_type,
+        "discount": discount,
         "amount_collected_by": amount_collected_by,
         "created_by": created_by,
         "updated_by": updated_by,

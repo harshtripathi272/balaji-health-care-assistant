@@ -20,6 +20,7 @@ from firebase_config.inventory import (
     get_inventory_item_by_id, update_inventory_item, update_stock_quantity,
     delete_inventory_item, get_items_expiring_soon
 )
+from firebase_config.dashboard import add_expense, add_payment, add_supplier_payment, get_all_dues, get_date_range, get_expenses, get_inventory_distribution_by_category, get_low_stock_items_dashboard, get_net_profit,  get_order_trend, get_overdue_payments, get_supplier_payments,get_payments, get_total_expenses, get_top_selling_items, get_total_orders, get_total_payments, get_total_revenue 
 from firebase_config.orders import (
     add_order, get_all_orders, get_order_by_id, get_orders_by_status,
     get_orders_by_date_range, get_total_sales_in_period, update_order,
@@ -58,42 +59,32 @@ with tabs[0]:
     st.subheader("Overview")
     try:
         # Fetch data for metrics
-        inventory_items = get_all_inventory_items() or []
-        orders = get_all_orders() or []
-        invoices = get_all_invoices() or []
-        clients = get_all_clients() or []
-        dues = get_all_dues() or []
-        total_payments = get_total_payments() or []
-        total_expenses = get_total_expenses() or []
-        # Calculate metrics
-        total_inventory = len(inventory_items)
-        low_stock = len([item for item in inventory_items if item.get("stock_quantity", 0) < 10])
-        total_orders = len(orders)
-        total_invoices = len(invoices)
-        total_due = sum(d['total_due'] for d in dues if d.get('total_due', 0.0))
-        net_balance = total_payments - total_expenses
+        total_inventory = len(get_all_inventory_items() or [])
+        low_stock_items = get_low_stock_items_dashboard(threshold=10) or []
+        total_orders = get_total_orders()
+        total_revenue = get_total_revenue()
+        total_expenses = get_total_expenses()
+        net_profit = get_net_profit()
+        total_dues = sum(d['total_due'] for d in get_all_dues() if d.get('total_due', 0.0))
 
         # Display metrics in columns
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Total Inventory Items", total_inventory)
-            st.metric("Low Stock Items", low_stock)
+            st.metric("Low Stock Items", len(low_stock_items))
         with col2:
             st.metric("Total Orders", total_orders)
-            st.metric("Total Invoices", total_invoices)
+            st.metric("Total Revenue", f"₹{total_revenue:,.2f}")
         with col3:
-            st.metric("Total Dues", f"₹{total_due:.2f}")
-            st.metric("Net Balance,", f"₹{net_balance:.2f}")
+            st.metric("Total Expenses", f"₹{total_expenses:,.2f}")
+            st.metric("Net Profit", f"₹{net_profit:,.2f}")
 
         # Inventory by Category Chart
         st.subheader("Inventory by Category")
         try:
-            category_counts = {}
-            for item in inventory_items:
-                cat = item.get("category", "Unknown")
-                category_counts[cat] = category_counts.get(cat, 0) + 1
-            df_category = pd.DataFrame(list(category_counts.items()), columns=["Category", "Count"])
-            st.bar_chart(df_category.set_index("Category"))
+            category_dist = get_inventory_distribution_by_category()
+            df_category = pd.DataFrame(category_dist)
+            st.bar_chart(df_category.set_index("category"))
         except Exception as e:
             logger.error(f"Error generating inventory by category chart: {e}")
             st.error(f"Error: {e}")
@@ -103,16 +94,10 @@ with tabs[0]:
         try:
             end_date = datetime.now()
             start_date = end_date - timedelta(days=30)
-            orders_in_range = get_orders_by_date_range(start_date, end_date) or []
-            sales_data = {}
-            for order in orders_in_range:
-                date_str = order.get("date", end_date.isoformat()).split("T")[0]
-                amount = order.get("total_amount", 0.0)
-                sales_data[date_str] = sales_data.get(date_str, 0.0) + amount
-            df_sales = pd.DataFrame(list(sales_data.items()), columns=["Date", "Sales"])
-            df_sales["Date"] = pd.to_datetime(df_sales["Date"])
-            df_sales = df_sales.sort_values("Date")
-            st.line_chart(df_sales.set_index("Date"))
+            sales_trend = get_order_trend(start_date, end_date, group_by="day")
+            df_sales = pd.DataFrame(sales_trend)
+            df_sales["date"] = pd.to_datetime(df_sales["date"])
+            st.line_chart(df_sales.set_index("date"))
         except Exception as e:
             logger.error(f"Error generating sales over time chart: {e}")
             st.error(f"Error: {e}")
@@ -120,7 +105,6 @@ with tabs[0]:
         # Low Stock Items Table
         st.subheader("⚠️ Low Stock Items (Threshold: 10)")
         try:
-            low_stock_items = get_low_stock_items(threshold=10) or []
             if low_stock_items:
                 df_low_stock = pd.DataFrame(low_stock_items)
                 st.dataframe(df_low_stock[["name", "stock_quantity", "category"]])
@@ -128,6 +112,32 @@ with tabs[0]:
                 st.info("No low stock items found.")
         except Exception as e:
             logger.error(f"Error fetching low stock items for dashboard: {e}")
+            st.error(f"Error: {e}")
+
+        # Top Selling Items
+        st.subheader("🏆 Top Selling Items")
+        try:
+            top_items = get_top_selling_items(limit=5)
+            if top_items:
+                df_top = pd.DataFrame(top_items)
+                st.dataframe(df_top[["item_name", "quantity", "total_amount"]])
+            else:
+                st.info("No top selling items found.")
+        except Exception as e:
+            logger.error(f"Error fetching top selling items: {e}")
+            st.error(f"Error: {e}")
+
+        # Overdue Payments
+        st.subheader("📅 Overdue Payments")
+        try:
+            overdue_clients = get_overdue_payments(days_overdue=7)
+            if overdue_clients:
+                df_due = pd.DataFrame(overdue_clients)
+                st.dataframe(df_due[["client_name", "total_due", "overdue_days"]])
+            else:
+                st.info("No overdue payments found.")
+        except Exception as e:
+            logger.error(f"Error fetching overdue payments: {e}")
             st.error(f"Error: {e}")
 
         # Quick Links

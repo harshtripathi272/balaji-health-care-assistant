@@ -10,14 +10,20 @@ Settings.embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/al
 
 def build_item_documents():
     items = get_all_inventory_items()
-    docs =[]
+    docs = []
     for item in items:
+        batches = item.get("batch", [])
+        batch_info_text = ""
+        for batch in batches:
+            batch_info_text += f"\n    Batch No: {batch.get('batch_number')}, Expiry: {batch.get('exp')}, Qty: {batch.get('quantity')}"
+
         text = f"""
-        Name: {item.get("name")}
-        Stock Quantity: {item.get("stock_quantity")}
-        Batch Info: {item.get("batch_info")}
-        Base Price: {item.get("base_price")}
-        Threshold: {item.get("low_stock_threshold")}
+        Item Name: {item.get("name")}
+        Item ID: {item.get("id")}
+        Category: {item.get("category")}
+        Total Quantity: {item.get("quantity")}
+        Low Stock Threshold: {item.get("low_stock")}
+        Batches: {batch_info_text.strip()}
         """
         docs.append(Document(text=text.strip()))
     return docs
@@ -25,7 +31,7 @@ def build_item_documents():
 if __name__ == "__main__":
     docs = build_item_documents()
     if not docs:
-        print("❌ No Clients found. Index not built.")
+        print("❌ No items found. Index not built.")
     else:
         build_items_index(docs)
-        print("✅ Clients index built and saved.")
+        print("✅ Items index built and saved.")

@@ -10,12 +10,17 @@ Settings.embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/al
 
 def build_client_documents():
     clients = get_all_clients()
-    docs =[]
+    docs = []
     for client in clients:
         text = f"""
         Name: {client.get("name")}
-        Price List: {client.get("price_list")}
-        Due amount: {client.get("due_amount")}
+        Client ID: {client.get("id")}
+        PAN: {client.get("pan", "N/A")}
+        GST: {client.get("gst", "N/A")}
+        Point of Contact Name: {client.get("poc_name", "")}
+        Point of Contact Contact: {client.get("poc_contact", "")}
+        Due Amount: ₹{client.get("due_amount", 0)}
+        Address: {client.get("address", "")}
         """
         docs.append(Document(text=text.strip()))
     return docs
@@ -23,7 +28,7 @@ def build_client_documents():
 if __name__ == "__main__":
     docs = build_client_documents()
     if not docs:
-        print("❌ No Clients found. Index not built.")
+        print("❌ No clients found. Index not built.")
     else:
         build_clients_index(docs)
         print("✅ Clients index built and saved.")

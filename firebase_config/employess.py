@@ -21,6 +21,7 @@ def add_employee(employee_data: Dict) -> str:
         "id": employee_id,
         "name": employee_data.get("name", ""),
         "collected": 0,
+        "phone": employee_data.get("phone"),
         "paid": 0,
         "created_at": firestore.SERVER_TIMESTAMP,
         "updated_at": firestore.SERVER_TIMESTAMP
@@ -29,15 +30,15 @@ def add_employee(employee_data: Dict) -> str:
     return employee_id
 
 def get_employee_by_name(name):
-    docs = db.collection("employees").where("name", "==", name).stream()
+    docs = db.collection("Employees").where("name", "==", name).stream()
     return [doc.to_dict() for doc in docs]
 
 def get_all_employees():
-    docs = db.collection("employees").stream()
+    docs = db.collection("Employees").stream()
     return [doc.to_dict() for doc in docs]
 
 def update_employee(employee_id, updated_data):
-    db.collection("employees").document(employee_id).update(updated_data)
+    db.collection("Employees").document(employee_id).update(updated_data)
 
 def delete_employee(employee_id):
-    db.collection("employees").document(employee_id).delete()
+    db.collection("Employees").document(employee_id).delete()

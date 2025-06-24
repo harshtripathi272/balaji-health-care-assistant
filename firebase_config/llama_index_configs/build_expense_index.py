@@ -10,15 +10,15 @@ Settings.embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/al
 
 def build_expense_documents():
     items = get_expenses()
-    docs =[]
+    docs = []
     for item in items:
         text = f"""
-        Paid By: {item.get("paid_by")}
+        Amount: ₹{item.get("amount")}
         Category: {item.get("category")}
+        Paid By: {item.get("paid_by")}
+        Remarks: {item.get("remarks", "")}
         Expense Date: {item.get("expense_date")}
-        Amount: {item.get("amount")}
         Created At: {item.get("created_at")}
-        Remarks: {item.get("reamarks")}
         """
         docs.append(Document(text=text.strip()))
     return docs
@@ -26,7 +26,7 @@ def build_expense_documents():
 if __name__ == "__main__":
     docs = build_expense_documents()
     if not docs:
-        print("❌ No Clients found. Index not built.")
+        print("❌ No expenses found. Index not built.")
     else:
         build_expenses_index(docs)
-        print("✅ Clients index built and saved.")
+        print("✅ Expenses index built and saved.")
